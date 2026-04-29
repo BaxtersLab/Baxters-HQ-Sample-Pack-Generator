@@ -1,0 +1,33 @@
+{
+  "paths": {
+    "input_files": [],
+    "output_folder": null,
+    "last_used_input": null,
+    "last_used_output": null
+  },
+  "settings": {
+    "backsplash_enabled": true,
+    "hoverlogic_enabled": true,
+    "theme": "dark",
+    "debug_enabled": false
+  },
+  "flowchart": {
+    "cb1": true,
+    "cb2": true,
+    "cb3": true,
+    "cb4": true,
+    "cb5": true,
+    "cb6": true,
+    "cb7": true,
+    "cb8": true
+  },
+  "hrt": {
+    "auto_connect": false,
+    "manual_override": false,
+    "connected": false,
+    "host": "127.0.0.1",
+    "port": 8080,
+    "autolink_enabled": true
+  },
+  "terms_accepted": true
+}

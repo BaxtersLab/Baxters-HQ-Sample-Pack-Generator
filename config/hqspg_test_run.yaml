@@ -1,0 +1,9 @@
+loader:
+  folder: c:/Users/Baxter/Desktop/Vens Constitution\test_audio
+  mode: Folder
+output:
+  base_dir: c:/Users/Baxter/Desktop/Vens Constitution\test_output
+repair:
+  mode: balanced
+separator:
+  model: htdemucs_6s

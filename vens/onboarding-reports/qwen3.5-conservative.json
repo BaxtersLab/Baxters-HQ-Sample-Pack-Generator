@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-04-19T04:34:51.146266Z",
+  "source_search_roots": [
+    "C:\\Users\\Baxter\\Desktop\\Vens Constitution",
+    "C:\\Users\\Baxter\\Desktop\\gguf chatbox"
+  ],
+  "source_ctx_detected": 131072,
+  "source_n_gpu_layers_detected": 33,
+  "computed": {
+    "ctx_size": 65536,
+    "n_gpu_layers": 24,
+    "threads": 4
+  },
+  "output_yaml": "tools\\generated_profiles\\qwen3.5-conservative.yaml",
+  "notes": "No changes made to C:\\Users\\Baxter\\.continue\\config.yaml. Review before applying.",
+  "suggested_tests": [
+    "Invoke GET http://127.0.0.1:8080/v1/models with Authorization: Bearer local",
+    "POST /v1/chat/completions with model set to this profile's model and small message"
+  ]
+}

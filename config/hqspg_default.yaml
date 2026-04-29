@@ -1,0 +1,18 @@
+# HQSPG default configuration (scaffold)
+
+inputs: []
+
+separator:
+  model: htdemucs_6s
+
+repair:
+  mode: balanced
+  glimmer_sensitivity: 0.02
+
+extractor:
+  silence_threshold: 0.01
+  min_silence_ms: 120
+  min_event_ms: 50
+
+output:
+  base_dir: HQSPG_output

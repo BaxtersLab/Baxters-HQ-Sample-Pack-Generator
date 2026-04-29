@@ -1,0 +1,65 @@
+# ══════════════════════════════════════════════════════════
+# VENS SETUP WIZARD — Fill In The Blanks
+# ══════════════════════════════════════════════════════════
+#
+# Welcome to Vens! Fill in each section below, then save this file.
+# Once complete, the Vens team (Antigravity + Copilot) will use
+# your answers to begin working.
+#
+# Instructions:
+#   1. Replace every (FILL IN) placeholder with your answer
+#   2. Save this file (Ctrl+S)
+#   3. The bootstrap script will copy your answers into the
+#      correct Vens files automatically
+#
+# ══════════════════════════════════════════════════════════
+
+
+# ──────────────────────────────────────────────────────────
+# SECTION 1: PROJECT IDENTITY
+# ──────────────────────────────────────────────────────────
+
+PROJECT_NAME=(FILL IN your project name, e.g. MyWebApp)
+
+SOURCE_PATH=(FILL IN absolute path to your project folder, e.g. C:\Users\Baxter\Desktop\MyWebApp)
+
+
+# ──────────────────────────────────────────────────────────
+# SECTION 2: MISSION
+# ──────────────────────────────────────────────────────────
+
+PRIMARY_OBJECTIVE=(FILL IN one clear paragraph describing what you are building)
+
+NON_NEGOTIABLE_CONSTRAINTS=(FILL IN rules that must never be violated, separated by semicolons)
+
+SUCCESS_CRITERIA=(FILL IN what "done" looks like — what conditions must be met?)
+
+
+# ──────────────────────────────────────────────────────────
+# SECTION 3: FIRST TASK
+# ──────────────────────────────────────────────────────────
+
+TASK_DESCRIPTION=(FILL IN a clear description of the first thing to build)
+
+TASK_PRIORITY=(FILL IN a number 1-5, where 1 is highest priority)
+
+ASSIGN_TO=(FILL IN either ANTIGRAVITY or COPILOT)
+
+
+# ──────────────────────────────────────────────────────────
+# SECTION 4: TRIGGER
+# ──────────────────────────────────────────────────────────
+# Choose one of the following trigger commands:
+#   START              — Begin working toward the goal
+#   BEGIN MODULE A BLOCK 1  — Start at a specific module/block
+#   EXECUTE MAIN_GOAL  — Begin from the top of the hierarchy
+#   HALT               — Keep the system dormant for now
+#
+
+TRIGGER_COMMAND=(FILL IN your trigger command, e.g. START)
+
+
+# ══════════════════════════════════════════════════════════
+# DONE! Save this file, then run apply_setup.js (the
+# bootstrap script will do this automatically).
+# ══════════════════════════════════════════════════════════

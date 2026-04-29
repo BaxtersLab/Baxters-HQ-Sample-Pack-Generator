@@ -1,0 +1,358 @@
+ # --- Ensure bspg package is importable regardless of launch directory ---
+import sys, os
+ROOT = os.path.dirname(os.path.abspath(__file__))
+BSPG_PATH = os.path.join(ROOT, "bspg")
+
+if BSPG_PATH not in sys.path:
+    sys.path.insert(0, BSPG_PATH)
+
+from PySide6.QtWidgets import QApplication
+import atexit
+import time
+
+try:
+    from appdirs import user_data_dir
+except Exception:
+    user_data_dir = None
+
+
+def get_lock_file_path() -> str:
+    app_name = 'HQSPG'
+    app_author = 'BaxtersHQ'
+    if user_data_dir is not None:
+        base_dir = user_data_dir(app_name, app_author)
+    else:
+        base_dir = os.path.join(os.path.expanduser('~'), '.hqspg')
+    try:
+        os.makedirs(base_dir, exist_ok=True)
+    except Exception:
+        pass
+    return os.path.join(base_dir, 'hqspg_instance.lock')
+
+
+LOCKFILE = get_lock_file_path()
+
+
+def acquire_lock():
+    """Attempt to acquire a non-blocking file lock. Returns file object on success, else None."""
+    try:
+        # Try platform-specific locking first
+        if sys.platform == 'win32':
+            # Windows-specific locking
+            import msvcrt
+            f = open(LOCKFILE, 'w')
+            try:
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                f.write(str(os.getpid()))
+                f.flush()
+                return f
+            except OSError:
+                try:
+                    f.close()
+                except Exception:
+                    pass
+                return None
+        else:
+            # Linux/Unix locking using fcntl
+            import fcntl
+            f = open(LOCKFILE, 'w')
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                f.write(str(os.getpid()))
+                f.flush()
+                return f
+            except (IOError, OSError):
+                try:
+                    f.close()
+                except Exception:
+                    pass
+                return None
+    except Exception:
+        # Fallback: try to create the lock file exclusively
+        try:
+            fd = os.open(LOCKFILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            f = os.fdopen(fd, 'w')
+            f.write(str(os.getpid()))
+            f.flush()
+            return f
+        except Exception:
+            return None
+
+
+def release_lock(fobj):
+    """Release the file lock and cleanup."""
+    if fobj is None:
+        return
+    try:
+        # Platform-specific unlock
+        if sys.platform == 'win32':
+            try:
+                import msvcrt
+                try:
+                    msvcrt.locking(fobj.fileno(), msvcrt.LK_UNLCK, 1)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        else:
+            # Linux/Unix unlock using fcntl
+            try:
+                import fcntl
+                fcntl.flock(fobj.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+        
+        # Close file and remove lock file
+        try:
+            fobj.close()
+        except Exception:
+            pass
+        try:
+            if os.path.exists(LOCKFILE):
+                os.remove(LOCKFILE)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def main():
+    # Single-instance enforcement
+    lock = acquire_lock()
+    if lock is None:
+        print('Another instance of HQSPG is already running. Exiting.', flush=True)
+        sys.exit(0)
+    
+    # Register cleanup on exit
+    atexit.register(lambda: release_lock(lock))
+
+    try:
+        print('DEBUG: importing MainWindow...', flush=True)
+        from bspg.gui.main_window import MainWindow
+        print('DEBUG: imported MainWindow successfully', flush=True)
+    except Exception as e:
+        print('Failed to import MainWindow:', e)
+        release_lock(lock)
+        raise
+
+    print('DEBUG: creating QApplication', flush=True)
+    app = QApplication(sys.argv)
+    # Load AppConfig once at startup and pass the instance into the MainWindow
+    try:
+        from bspg.core.config import AppConfig
+        app_conf = AppConfig()
+        try:
+            app_conf.load()
+        except Exception:
+            pass
+    except Exception:
+        app_conf = None
+
+    print('DEBUG: instantiating MainWindow', flush=True)
+    win = MainWindow(app_config=app_conf)
+    print('DEBUG: MainWindow instantiated', flush=True)
+    win.show()
+    print('DEBUG: window show() called', flush=True)
+    # --- FORCE WINDOW ON-SCREEN ---
+    try:
+        geom = win.frameGeometry()
+        screen = app.primaryScreen().availableGeometry()
+        if not screen.contains(geom.center()):
+            print('FIX: Window was off-screen, moving to center', flush=True)
+            win.move(screen.center() - geom.center())
+    except Exception:
+        pass
+    # --- END FORCE WINDOW ON-SCREEN ---
+    # --- DIAGNOSTIC BLOCK ---
+    import traceback
+    from PySide6.QtWidgets import QWidget
+
+    try:
+        cw = win.centralWidget()
+        print('DIAG: centralWidget =', cw, flush=True)
+
+        if cw is None:
+            print('DIAG: centralWidget is None (fatal)', flush=True)
+        else:
+            print('DIAG: centralWidget type =', type(cw), flush=True)
+            try:
+                layout = cw.layout()
+                print('DIAG: centralWidget layout =', layout, flush=True)
+                if layout is not None:
+                    try:
+                        print('DIAG: centralWidget layout count =', layout.count(), flush=True)
+                    except Exception as e:
+                        print('DIAG: layout.count() error:', e, flush=True)
+            except Exception as e:
+                print('DIAG: centralWidget layout error:', e, flush=True)
+            try:
+                children = cw.findChildren(QWidget)
+                print('DIAG: centralWidget QWidget children count =', len(children), flush=True)
+            except Exception as e:
+                print('DIAG: findChildren error:', e, flush=True)
+
+        try:
+            print('DIAG: hasattr _terms_overlay:', hasattr(win, '_terms_overlay'), flush=True)
+            if hasattr(win, '_terms_overlay'):
+                print('DIAG: _terms_overlay =', getattr(win, '_terms_overlay'), flush=True)
+        except Exception as e:
+            print('DIAG: _terms_overlay check error:', e, flush=True)
+
+        try:
+            print('DIAG: hasattr settings_panel:', hasattr(win, 'settings_panel'), flush=True)
+            print('DIAG: MainWindow children count:', len(win.children()), flush=True)
+        except Exception as e:
+            print('DIAG: MainWindow children error:', e, flush=True)
+
+    except Exception:
+        print('DIAG: Exception during diagnostics:', flush=True)
+        traceback.print_exc()
+    # --- END DIAGNOSTIC BLOCK ---
+
+    try:
+        print('DEBUG: entering event loop', flush=True)
+        # --- GEOMETRY DIAGNOSTICS ---
+        try:
+            cw = win.centralWidget()
+            print('GEOM: centralWidget =', cw, flush=True)
+            if cw:
+                try:
+                    print('GEOM: cw.size =', cw.size(), flush=True)
+                    print('GEOM: cw.geometry =', cw.geometry(), flush=True)
+                    print('GEOM: cw.rect =', cw.rect(), flush=True)
+                    print('GEOM: cw.isVisible =', cw.isVisible(), flush=True)
+                except Exception as e:
+                    print('GEOM: error querying cw geometry:', e, flush=True)
+
+                layout = cw.layout()
+                print('GEOM: layout =', layout, flush=True)
+                if layout:
+                    try:
+                        print('GEOM: layout.count =', layout.count(), flush=True)
+                        for i in range(layout.count()):
+                            item = layout.itemAt(i)
+                            w = item.widget()
+                            print(f'GEOM: item {i} widget =', w, flush=True)
+                            if w:
+                                try:
+                                    print(f'GEOM: item {i} size =', w.size(), flush=True)
+                                    print(f'GEOM: item {i} geometry =', w.geometry(), flush=True)
+                                    print(f'GEOM: item {i} rect =', w.rect(), flush=True)
+                                    print(f'GEOM: item {i} visible =', w.isVisible(), flush=True)
+                                except Exception as e:
+                                    print(f'GEOM: item {i} geometry error:', e, flush=True)
+                    except Exception as e:
+                        print('GEOM: error iterating layout items:', e, flush=True)
+        except Exception as e:
+            import traceback
+            print('GEOM: Exception during geometry dump:', flush=True)
+            traceback.print_exc()
+        # --- END GEOMETRY DIAGNOSTICS ---
+        # --- STYLE / TOP-LEVEL WIDGETS DIAGNOSTICS ---
+        try:
+            from PySide6.QtGui import QPalette
+            from PySide6.QtCore import Qt
+            try:
+                print('STYLE: app.styleSheet =', app.styleSheet(), flush=True)
+            except Exception:
+                print('STYLE: app.styleSheet error', flush=True)
+            try:
+                print('STYLE: win.styleSheet =', win.styleSheet(), flush=True)
+            except Exception:
+                print('STYLE: win.styleSheet error', flush=True)
+            try:
+                cw = win.centralWidget()
+                print('STYLE: cw.styleSheet =', cw.styleSheet() if cw is not None else None, flush=True)
+            except Exception:
+                print('STYLE: cw.styleSheet error', flush=True)
+
+            try:
+                pal = app.palette()
+                def col(role):
+                    try:
+                        return pal.color(role).name()
+                    except Exception:
+                        return '<err>'
+                from PySide6.QtGui import QPalette as _QP
+                print('STYLE: palette Window=', col(_QP.Window), ' Base=', col(_QP.Base), ' WindowText=', col(_QP.WindowText), ' Text=', col(_QP.Text), flush=True)
+            except Exception:
+                print('STYLE: palette error', flush=True)
+
+            try:
+                # List top-level widgets to find any unexpected overlays
+                from PySide6.QtWidgets import QApplication as _QApp
+                tops = _QApp.topLevelWidgets()
+                print('STYLE: topLevelWidgets count =', len(tops), flush=True)
+                for i, tw in enumerate(tops):
+                    try:
+                        print(f'STYLE: top {i} =', tw, 'geom=', tw.geometry(), 'visible=', tw.isVisible(), 'flags=', int(tw.windowFlags()), flush=True)
+                        ss = tw.styleSheet()
+                        print(f'STYLE: top {i} styleSheet =', ss if ss else '<empty>', flush=True)
+                    except Exception:
+                        print(f'STYLE: top {i} info error', flush=True)
+            except Exception:
+                print('STYLE: topLevelWidgets error', flush=True)
+        except Exception:
+            import traceback
+            print('STYLE: Exception during style diagnostics', flush=True)
+            traceback.print_exc()
+
+        # Schedule a brief screenshot grab of the main window and central widget for visual inspection
+        try:
+            from PySide6.QtCore import QTimer
+            from PySide6.QtGui import QPixmap
+            def _save_screenshot():
+                try:
+                    path = os.path.join(ROOT, 'diag_window.png')
+                    try:
+                        pm = win.grab()
+                    except Exception:
+                        pm = None
+                    if pm is not None:
+                        pm.save(path)
+                        print('STYLE: saved window screenshot to', path, flush=True)
+                    else:
+                        print('STYLE: grab failed', flush=True)
+                except Exception as e:
+                    print('STYLE: screenshot error', e, flush=True)
+            QTimer.singleShot(500, _save_screenshot)
+        except Exception:
+            print('STYLE: scheduling screenshot failed', flush=True)
+
+            # --- PAINT WRAPPER FOR FLOWCHART ---
+            try:
+                import types, traceback
+                fc = win.findChild(QWidget, 'flowchart_container')
+                if fc is None:
+                    print('PAINT: flowchart_container not found', flush=True)
+                else:
+                    try:
+                        orig = fc.paintEvent
+                    except Exception:
+                        orig = None
+                    if orig is None:
+                        print('PAINT: no original paintEvent found on flowchart_container', flush=True)
+                    else:
+                        def safe_paint(self, ev):
+                            try:
+                                return orig(ev)
+                            except Exception:
+                                print('PAINT: Exception in flowchart_container.paintEvent', flush=True)
+                                traceback.print_exc()
+                                raise
+                        try:
+                            fc.paintEvent = types.MethodType(safe_paint, fc)
+                            print('PAINT: wrapped flowchart_container.paintEvent', flush=True)
+                        except Exception as e:
+                            print('PAINT: error binding paintEvent:', e, flush=True)
+            except Exception as e:
+                print('PAINT: setup error:', e, flush=True)
+            # --- END PAINT WRAPPER ---
+
+        sys.exit(app.exec())
+    finally:
+        release_lock(lock)
+
+
+if __name__ == '__main__':
+    main()

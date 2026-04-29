@@ -1,0 +1,32 @@
+name: Local Config
+version: 1.0.0
+schema: v1
+models:
+- name: Qwen3.5-9B
+  provider: openai
+  apiBase: http://127.0.0.1:8080
+  apiKey: ''
+  model: Qwen3.5-9B-GLM5.1-Distill-v1-BF16.gguf
+  context: {}
+  rules: {}
+  prompts: {}
+  docs: {}
+  mcpServers: {}
+  data: {}
+active_profile: Qwen3.5-9B
+profiles:
+  Autodetect:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: ''
+    model: gemma-4-31B-it-Q8_0
+  Qwen3-8B:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: ''
+    model: Qwen3-8B-GPT-5-Codex-Distill.bf16.gguf
+  Qwen3.5-9B:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: ''
+    model: Qwen3.5-9B-GLM5.1-Distill-v1-BF16.gguf

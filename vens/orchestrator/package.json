@@ -1,0 +1,9 @@
+{
+  "name": "vens-orchestrator",
+  "version": "1.0.0",
+  "description": "Vens file watcher orchestrator — monitors agent turns and dispatches notifications",
+  "main": "orchestrator.js",
+  "scripts": {
+    "start": "node orchestrator.js"
+  }
+}

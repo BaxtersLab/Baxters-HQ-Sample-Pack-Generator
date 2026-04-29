@@ -1,0 +1,169 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+share/python-wheels/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.coverage
+.coverage.*
+.cache
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+
+# Pyre type checker
+.pyre/
+
+# MyPy
+.mypy_cache/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*~
+*.swp
+*.tmp
+*.bak
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Coverage and profiling
+coverage.xml
+*.prof
+
+# Local config files
+local_settings.py
+config.yaml.bak*
+
+# PID files
+*.pid
+
+# Generated profiles / large artifacts
+tools/generated_profiles/
+onboarding-reports/backups/
+
+# Build artifacts
+dist/
+build/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Audio/large binary outputs (if you store generated WAVs locally)
+*.wav
+*.flac
+*.mp3
+
+# Keep the repo clean: ignore any user-specific secrets
+.env
+.env.*
+# Local ignore rules for Vens Constitution workspace
+# Internal push notes (do not commit)
+push_notes.md
+
+# Virtual env
+.venv/
+
+# Demucs outputs
+demucs_out/
+demucs_out_6s/
+
+# Temporary files
+*.tmp
+*.wav_repaired.bak
+
+# Python/cache
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Ignore module-block txt files used for planning/specs
+hqspg/module block/*.txt
+**/module block/*.txt
+
+# Windows build output
+*.exe
+*.dll
+*.pyd
+
+# Re-include the PyInstaller spec (was excluded by *.spec above)
+!hqspg_gui.spec
+
+# Lock files
+*.lock
+
+# Diagnostic images
+diag_window.png
+gui_flowchart_test.png
+
+# vens agent runtime (don't commit agent state)
+vens/logs/
+vens/memory/
+vens/state/
+vens/messages/
+vens/tasks/
+vens/rollback/

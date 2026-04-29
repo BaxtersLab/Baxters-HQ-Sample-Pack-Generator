@@ -1,0 +1,54 @@
+name: Local Config
+version: 1.0.0
+schema: v1
+models:
+- name: Qwen3.5-9B-conservative-mcp
+  provider: openai
+  apiBase: http://127.0.0.1:8080
+  apiKey: local
+  model: Qwen3.5-9B-GLM5.1-Distill-v1-BF16.gguf
+  context: {}
+  rules: {}
+  prompts: {}
+  docs: {}
+  mcpServers: &id001
+  - name: MemPalaceMinimal
+    command: c:\Users\Baxter\Desktop\Vens Constitution\.venv\Scripts\python.exe
+    args:
+    - c:\Users\Baxter\Desktop\Vens Constitution\vens\mempalace_adapter\mempalace_minimal_mcp.py
+    cwd: c:\Users\Baxter\Desktop\Vens Constitution\vens\mempalace_adapter
+    connectionTimeout: 10
+  data: {}
+active_profile: Qwen3.5-9B-conservative-mcp
+profiles:
+  Autodetect:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: local
+    model: gemma-4-31B-it-Q8_0
+  Qwen3-8B:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: local
+    model: Qwen3-8B-GPT-5-Codex-Distill.bf16.gguf
+  Qwen3.5-9B:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: local
+    model: Qwen3.5-9B-GLM5.1-Distill-v1-BF16.gguf
+  Qwen3.5-9B-conservative-mcp:
+    provider: openai
+    apiBase: http://127.0.0.1:8080
+    apiKey: local
+    model: Qwen3.5-9B-GLM5.1-Distill-v1-BF16.gguf
+    capabilities:
+    - chat
+    defaultCompletionOptions:
+      contextLength: 65536
+      temperature: 0.2
+      maxTokens: 1024
+    requestOptions:
+      timeout: 120000
+      headers:
+        Authorization: Bearer local
+    mcpServers: *id001

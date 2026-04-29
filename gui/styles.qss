@@ -1,0 +1,136 @@
+/* Baxters HQ Sample Pack Generator stylesheet */
+QWidget#MainWindow {
+  background: transparent;
+  border-radius: 18px;
+}
+
+/* Backdrops applied to central widget at runtime */
+
+QWidget#TopBar {
+  background: #000000;
+  color: #eaeaea;
+  border-radius: 0px;
+}
+
+QWidget#BottomBar {
+  background: rgba(20,20,20,0.6);
+  color: #eaeaea;
+  border-radius: 8px;
+}
+
+/* Top lane container - button rows at top */
+QWidget#top_lane_container {
+  background: transparent;
+  border: 2px solid #000000;
+  border-radius: 12px;
+  padding: 4px;
+}
+
+/* Collapsible debug drawer */
+#CollapsibleDrawer {
+  background: #1a1a1a;
+  color: #007BFF;
+  border: 2px solid #000;
+  border-radius: 18px;
+}
+
+#DebugTerminal {
+  background: transparent;
+  color: #007BFF;
+  border: none;
+}
+
+QPushButton {
+  background: #4FC3FF;  /* light blue */
+  color: #000000;  /* black text */
+  padding: 6px 12px;
+  border: 2px solid #000000;  /* black outline */
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 11px;
+}
+
+QPushButton:hover {
+  background: #6DD5FF;  /* lighter blue on hover */
+  border: 2px solid #000000;
+  color: #000000;
+}
+
+QPushButton:pressed {
+  background: #3AB3EF;  /* darker blue when pressed */
+  border: 2px solid #000000;
+  color: #000000;
+}
+
+QCheckBox, QComboBox {
+  color: #eaeaea;
+}
+
+QCheckBox::indicator {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #000000;
+  border-radius: 3px;
+  background: #ffffff;
+}
+
+QCheckBox::indicator:checked {
+  background: #ffffff;
+  border: 2px solid #000000;
+  image: url(hqspg/assets/check_black.svg);
+}
+
+QLabel#AppNameLabel {
+  color: #4FC3FF; /* light blue */
+  font-weight: 600;
+  font-size: 16px;
+  padding-left: 6px;
+}
+
+/* Title bar buttons */
+QWidget#CustomTitleBar {
+  background: #000000;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  border-left: 4px solid #000000;
+  border-right: 4px solid #000000;
+  border-top: 4px solid #000000;
+}
+QLabel#TitleBarAppName { color: #4FC3FF; font-weight: 600; font-size: 14px; padding-left:6px }
+QPushButton#TitleBarMin {
+  background: rgba(255,255,255,0.06);
+  color: #ddd;
+  border: none;
+}
+QPushButton#TitleBarClose {
+  background: #b70f0f;
+  color: #fff;
+  border: none;
+}
+
+QLabel#Indicator {
+  color: #00ff88;
+  font-weight: bold;
+}
+
+/* When backdrop-off theme is active, application logic will set central widget properties */
+
+/* Central widget backdrop via Qt resource */
+QWidget#CentralWidget {
+  background-image: url(":/assets/background.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-color: #111; /* fallback background */
+  /* bold black border on left/right/bottom to match titlebar */
+  border-left: 4px solid #000000;
+  border-right: 4px solid #000000;
+  border-bottom: 4px solid #000000;
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+  padding: 0px;
+  margin: 0px;
+}
+
+QWidget#BottomBand {
+  padding-right: 12px; /* give space for Settings button */
+}

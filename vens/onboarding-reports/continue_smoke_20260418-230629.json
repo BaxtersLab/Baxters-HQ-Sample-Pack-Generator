@@ -1,0 +1,13 @@
+{
+  "timestamp": "20260418-230629",
+  "tests": [
+    {
+      "path": "/v1/models",
+      "error": "[WinError 10061] No connection could be made because the target machine actively refused it"
+    },
+    {
+      "path": "/v1/chat/completions",
+      "error": "[WinError 10061] No connection could be made because the target machine actively refused it"
+    }
+  ]
+}
