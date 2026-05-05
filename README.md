@@ -1,10 +1,12 @@
-![HQSPG Banner](hqspg/assets/bannnner.png)
+![Baxter's HQ Sample Pack Generator Banner](hqspg/assets/bannnner.png)
 
-# HQSPG — HQ Sample Pack Generator
+# Baxter's HQ Sample Pack Generator
 
-This repository contains HQSPG: a pipeline to separate stems (Demucs), repair audio artifacts (HQ_StemRepair), and extract sample slices.
+A multi-stage audio pipeline for DJs, producers, and sound designers — separate stems, repair artifacts, and chop clean sample slices ready for your crates.
 
-Installation
+---
+
+## Installation
 
 1. Create a virtual environment and activate it:
 
@@ -19,51 +21,67 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-GUI Usage
+## GUI Usage
 
 - Launch the GUI:
 
-```bash
-python -m gui.main
+```powershell
+run_hqspg.bat
 ```
 
-- Use `Load` to pick a file or folder, `Save` to choose output folder.
-- Tweak `silence` and `transient` controls on the top bar.
-- Click `Generate` to run the full pipeline. Open the `Debug Terminal` drawer for live logs. Use `Demo Logs` to test logging without running the pipeline.
+- Use **Load** to pick a file or folder, **Save** to choose an output folder.
+- Configure your pipeline stages in the **Flowchart** panel.
+- Click **Run** to start. Open the **Debug Terminal** drawer for live logs.
 
-CLI Usage
+## CLI Usage
 
-- The `hqspg` package provides a CLI scaffold. For quick runs, use the `hqspg.pipeline.full_pipeline()` function in Python scripts.
+The `bspg` package provides a pipeline entry point. For scripted runs, use `bspg.backend_adapter.cli_runner`.
 
-Outputs
+## Outputs
 
-- Outputs are written to `<output_base>/<track_name>/` with subfolders:
-  - `stems/` — raw separator outputs
-  - `repaired/` — repaired stems
-  - `samples/` — extracted slices per stem and `samples_manifest.json`
+Outputs are written to `<output_folder>/<track_name>/` with subfolders:
 
-Resume & checkpoints
+- `stems/` — raw separator outputs
+- `repaired/` — repaired stems
+- `samples/` — extracted slices per stem + `samples_manifest.json`
 
-- Runs write to a temporary directory named `.hqspg_tmp_<track>_<ts>` under the output base.
-- A `hqspg_state.json` file is written after each stage so runs can resume if interrupted. The GUI prefers resuming existing `.hqspg_tmp_<track>_*` folders.
+## Resume & Checkpoints
 
-Packaging
+Runs write a `hqspg_state.json` after each stage so a pipeline can resume if interrupted.
 
-- A GitHub Actions workflow is provided at `.github/workflows/build_windows.yml` that uses `pyinstaller` to build a single EXE.
+## Packaging
 
-## About HQSPG
+A GitHub Actions workflow at `.github/workflows/build_windows.yml` builds a single Windows EXE via PyInstaller.
 
-HQSPG (High-Quality Sample Pack Generator) is a multi-stage audio pipeline that performs:
-
-- Source separation using Demucs
-- Repair and artifact reduction using an optional repair/generative stage
-- Silence-aware slicing and sample export for content creation
-
-The project focuses on reproducible, high-fidelity results suitable for archival and creative reuse.
+---
 
 ## Legal Responsibility Disclaimer
 
-This software is provided as a research / tooling aid. Users are responsible for ensuring they have the legal right to process, deconstruct, or redistribute any audio they run through this pipeline. The authors accept no liability for infringement resulting from users' actions. When using the pipeline on copyrighted material, obtain necessary permissions or ensure your use qualifies as fair use under applicable law.
+This software is provided as a research and tooling aid. Users are solely responsible for ensuring they have the legal right to process, deconstruct, or redistribute any audio they run through this pipeline. The authors accept no liability for infringement resulting from users' actions. When using the pipeline on copyrighted material, obtain necessary permissions or ensure your use qualifies as fair use under applicable law.
+
+---
+
+## Credits & Acknowledgements
+
+**Built by:** Baxter ([@BaxtersLab](https://github.com/BaxtersLab))
+
+**AI Co-Developer:** [Claude Sonnet 4.6](https://www.anthropic.com) by Anthropic — architecture decisions, pipeline logic, GUI wiring, and code review throughout development.
+
+**This project stands on the shoulders of open-source giants:**
+
+| Dependency | Purpose | License |
+|---|---|---|
+| [Demucs](https://github.com/facebookresearch/demucs) (Meta Research) | Stem separation | MIT |
+| [PySide6](https://doc.qt.io/qtforpython/) (Qt / The Qt Company) | GUI framework | LGPL v3 |
+| [PyInstaller](https://pyinstaller.org) | Windows EXE packaging | GPL v2 + bootloader exception |
+| [NumPy](https://numpy.org) | Audio array processing | BSD 3-Clause |
+| [SoundFile](https://python-soundfile.readthedocs.io) | Audio file I/O | BSD 3-Clause |
+| [SoundDevice](https://python-sounddevice.readthedocs.io) | Audio playback | MIT |
+| [Torch / torchaudio](https://pytorch.org) | ML backend for Demucs | BSD 3-Clause |
+
+We don't take credit for the hard work behind these libraries. We're just making the open-source magic happen.
+
+---
 
 ## License
 
