@@ -36,26 +36,26 @@ LOCKFILE = get_lock_file_path()
 
 
 def acquire_lock():
-    """
-    Acquire a single-instance lock.
-    On Windows: uses a named kernel mutex (guaranteed OS-level, survives crashes cleanly).
-    On other platforms: uses an exclusive file lock via fcntl.
-    Returns a handle on success, None if another instance is already running.
-    """
-    if sys.platform == 'win32':
-        import ctypes
-        import ctypes.wintypes
-        _MUTEX_NAME = 'Global\\BaxtersHQSPG_SingleInstance_v1'
-        ERROR_ALREADY_EXISTS = 183
-        handle = ctypes.windll.kernel32.CreateMutexW(None, True, _MUTEX_NAME)
-        if handle == 0:
-            return None  # CreateMutex failed entirely
-        if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
-            ctypes.windll.kernel32.CloseHandle(handle)
-            return None  # another instance owns the mutex
-        return handle  # we own it; keep alive until process exits
-    else:
-        try:
+    """Attempt to acquire a non-blocking file lock. Returns file object on success, else None."""
+    try:
+        # Try platform-specific locking first
+        if sys.platform == 'win32':
+            # Windows-specific locking
+            import msvcrt
+            f = open(LOCKFILE, 'w')
+            try:
+                msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                f.write(str(os.getpid()))
+                f.flush()
+                return f
+            except OSError:
+                try:
+                    f.close()
+                except Exception:
+                    pass
+                return None
+        else:
+            # Linux/Unix locking using fcntl
             import fcntl
             f = open(LOCKFILE, 'w')
             try:
@@ -69,27 +69,42 @@ def acquire_lock():
                 except Exception:
                     pass
                 return None
+    except Exception:
+        # Fallback: try to create the lock file exclusively
+        try:
+            fd = os.open(LOCKFILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            f = os.fdopen(fd, 'w')
+            f.write(str(os.getpid()))
+            f.flush()
+            return f
         except Exception:
             return None
 
 
 def release_lock(fobj):
-    """Release the lock handle acquired by acquire_lock."""
+    """Release the file lock and cleanup."""
     if fobj is None:
         return
-    if sys.platform == 'win32':
-        try:
-            import ctypes
-            ctypes.windll.kernel32.ReleaseMutex(fobj)
-            ctypes.windll.kernel32.CloseHandle(fobj)
-        except Exception:
-            pass
-    else:
-        try:
-            import fcntl
-            fcntl.flock(fobj.fileno(), fcntl.LOCK_UN)
-        except Exception:
-            pass
+    try:
+        # Platform-specific unlock
+        if sys.platform == 'win32':
+            try:
+                import msvcrt
+                try:
+                    msvcrt.locking(fobj.fileno(), msvcrt.LK_UNLCK, 1)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        else:
+            # Linux/Unix unlock using fcntl
+            try:
+                import fcntl
+                fcntl.flock(fobj.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+        
+        # Close file and remove lock file
         try:
             fobj.close()
         except Exception:
@@ -99,20 +114,15 @@ def release_lock(fobj):
                 os.remove(LOCKFILE)
         except Exception:
             pass
+    except Exception:
+        pass
 
 
 def main():
     # Single-instance enforcement
     lock = acquire_lock()
     if lock is None:
-        # Show a visible dialog before exiting so the user knows why nothing opened
-        _app = QApplication.instance() or QApplication(sys.argv)
-        from PySide6.QtWidgets import QMessageBox
-        msg = QMessageBox()
-        msg.setWindowTitle("Already Running")
-        msg.setText("Baxter's HQ Sample Pack Generator is already open.\n\nCheck your taskbar.")
-        msg.setIcon(QMessageBox.Warning)
-        msg.exec()
+        print('Another instance of HQSPG is already running. Exiting.', flush=True)
         sys.exit(0)
     
     # Register cleanup on exit
