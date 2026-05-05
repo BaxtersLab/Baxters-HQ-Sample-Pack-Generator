@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow,
+    QHBoxLayout,
     QWidget,
     QVBoxLayout,
     QAbstractButton,
@@ -15,8 +16,10 @@ from PySide6.QtWidgets import (
     QToolBar,
     QMenuBar,
     QLabel,
+    QPushButton,
 )
-from PySide6.QtCore import Qt, QTimer, QDateTime
+from PySide6.QtCore import Qt, QPoint, QTimer, QDateTime
+from PySide6.QtGui import QBitmap, QPainter
 
 from bspg.core.config import AppConfig
 from bspg.core.logging import bspg_logger
@@ -28,11 +31,65 @@ class MainWindowPlaceholder(QWidget):
     pass
 
 
+class _HQTitleBar(QWidget):
+    """Custom draggable title bar matching the Remixer app style."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setObjectName('HQTitleBar')
+        self.setFixedHeight(36)
+        self._main_window = parent
+        self._drag_start = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 0, 6, 0)
+        layout.setSpacing(4)
+
+        title = QLabel('Baxters HQ Sample Pack Generator')
+        title.setObjectName('HQTitleLabel')
+        layout.addWidget(title)
+        layout.addStretch()
+
+        min_btn = QPushButton('_')
+        min_btn.setObjectName('TitleBarMin')
+        min_btn.setFixedSize(36, 26)
+        min_btn.clicked.connect(parent.showMinimized)
+        layout.addWidget(min_btn)
+
+        max_btn = QPushButton('[ ]')
+        max_btn.setObjectName('TitleBarMin')
+        max_btn.setFixedSize(44, 26)
+        max_btn.clicked.connect(
+            lambda: parent.showNormal() if parent.isMaximized() else parent.showMaximized()
+        )
+        layout.addWidget(max_btn)
+
+        close_btn = QPushButton('X')
+        close_btn.setObjectName('TitleBarClose')
+        close_btn.setFixedSize(36, 26)
+        close_btn.clicked.connect(parent.close)
+        layout.addWidget(close_btn)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start = event.globalPosition().toPoint() - self._main_window.pos()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_start is not None and event.buttons() == Qt.MouseButton.LeftButton:
+            self._main_window.move(event.globalPosition().toPoint() - self._drag_start)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start = None
+
+
+
 class MainWindow(QMainWindow):
     def __init__(self, parent=None, app_config=None):
         super().__init__(parent)
-        self.setWindowTitle('Baxters Sample Pack Generator')
-        self.setMinimumSize(800, 600)
+        self.setWindowTitle('Baxters HQ Sample Pack Generator')
+        self.setMinimumSize(800, 750)
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
 
         # preserve original title for warning toggle
         self._original_title = self.windowTitle()
@@ -52,6 +109,13 @@ class MainWindow(QMainWindow):
         self.central_widget.setObjectName('CentralWidget')
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
+        # Reserve bottom 200px for the floating debug overlay so the flowchart
+        # never extends into that zone regardless of whether the overlay is shown.
+        self._DEBUG_OVERLAY_H = 230
+        self.main_layout.setContentsMargins(0, 0, 0, self._DEBUG_OVERLAY_H + 60)
+        # Title bar — first item in layout
+        self._title_bar = _HQTitleBar(self)
+        self.main_layout.addWidget(self._title_bar)
         
         # Load stylesheet for black borders, rounded edges, etc.
         try:
@@ -191,8 +255,14 @@ class MainWindow(QMainWindow):
             self.logo_container.setLayout(QVBoxLayout())
             # Make transparent so backdrop image shows through
             self.logo_container.setStyleSheet("background: transparent;")
-            # Increase minimum height for proper backdrop display
-            self.logo_container.setMinimumHeight(300)
+            # Minimum height just enough for the logo to breathe;
+            # Expanding policy lets it absorb all flex space so the
+            # flowchart stays compact above the debug overlay zone.
+            self.logo_container.setMinimumHeight(80)
+            from PySide6.QtWidgets import QSizePolicy
+            _sp = self.logo_container.sizePolicy()
+            _sp.setVerticalPolicy(QSizePolicy.Policy.Expanding)
+            self.logo_container.setSizePolicy(_sp)
             self.main_layout.addWidget(self.logo_container)
 
         # logo_label helper reference (added only if missing)
@@ -210,6 +280,12 @@ class MainWindow(QMainWindow):
             self.flowchart_widget.setObjectName('flowchart_container')
             # Make transparent so backdrop image shows through
             self.flowchart_widget.setAttribute(Qt.WA_TranslucentBackground, True)
+            # Fixed vertical policy: flowchart stays at its minimum height
+            # and does not grow into the debug overlay zone.
+            from PySide6.QtWidgets import QSizePolicy
+            _fsp = self.flowchart_widget.sizePolicy()
+            _fsp.setVerticalPolicy(QSizePolicy.Policy.Fixed)
+            self.flowchart_widget.setSizePolicy(_fsp)
             self.main_layout.addWidget(self.flowchart_widget)
             try:
                 self.logger.info('gui', 'Flowchart widget initialized')
@@ -234,27 +310,32 @@ class MainWindow(QMainWindow):
             self.main_layout.addWidget(self.flowchart_container)
 
     def init_debug_terminal(self):
-        self.debug_terminal_container = QWidget(self)
+        cw = self.centralWidget() or self
+        self.debug_terminal_container = QWidget(cw)
         self.debug_terminal_container.setObjectName('debug_terminal_container')
         self.debug_terminal_container.setLayout(QVBoxLayout())
+        self.debug_terminal_container.setStyleSheet(
+            '#debug_terminal_container { background: #111; border-top: 1px solid #333; }'
+        )
         # create a QTextEdit debug log area and expose via register_debug_terminal
         try:
             from PySide6.QtWidgets import QTextEdit
-            self.debug_log = QTextEdit(self)
+            self.debug_log = QTextEdit(self.debug_terminal_container)
             self.debug_log.setReadOnly(True)
             self.debug_log.setMinimumHeight(80)
-            self.debug_log.setStyleSheet('font-size: 10px; background-color: #111; color: #ccc;')
+            self.debug_log.setStyleSheet(
+                'QTextEdit { background-color: #000000; color: #4FC3FF;'
+                ' border: none; font-family: Consolas, "Courier New", monospace; font-size: 11px; }'
+            )
             self.debug_terminal_container.layout().addWidget(self.debug_log)
-            # also add to main layout so it's visible at the bottom
-            self.main_layout.addWidget(self.debug_log)
             # register for use by controller/connector
             self.register_debug_terminal(self.debug_log)
         except Exception:
             self.debug_log = None
-        try:
-            self.main_layout.addWidget(self.debug_terminal_container)
-        except Exception:
-            pass
+        # Float at the bottom — does NOT live in main_layout so flowchart is undisturbed
+        self._position_debug_overlay()
+        self.debug_terminal_container.setVisible(False)
+        self.debug_terminal_container.raise_()
 
     def init_settings_panel(self):
         # instantiate a default SettingsWindow if one is not present (add-only)
@@ -380,6 +461,15 @@ class MainWindow(QMainWindow):
 
     def register_debug_terminal(self, widget):
         self.debug_terminal_widget = widget
+        # Wire the widget into the logger's router so output actually appears
+        try:
+            from bspg.gui.debug_terminal.adapter import DebugTerminalSinkAdapter
+            from bspg.core.logging import bspg_logger
+            sink = DebugTerminalSinkAdapter(widget)
+            bspg_logger.router.add_sink(sink)
+            self._debug_sink = sink  # keep a reference so it isn't GC'd
+        except Exception:
+            pass
 
     def register_settings_panel(self, widget):
         self.settings_panel = widget
@@ -400,6 +490,11 @@ class MainWindow(QMainWindow):
                     pass
                 try:
                     self.controller.reset_pipeline_status()
+                except Exception:
+                    pass
+                # Gate run button on legal acceptance now that all widgets exist
+                try:
+                    self.controller.check_terms_gate()
                 except Exception:
                     pass
                 self.logger.info('gui', 'System ready.')
@@ -491,8 +586,37 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _position_debug_overlay(self):
+        """Pin the debug overlay to the bottom of the central widget."""
+        try:
+            cw = self.centralWidget() or self
+            panel = self.debug_terminal_container
+            panel_h = getattr(self, '_DEBUG_OVERLAY_H', 200)
+            panel.setGeometry(0, cw.height() - panel_h, cw.width(), panel_h)
+        except Exception:
+            pass
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # apply rounded corner mask
+        try:
+            bmp = QBitmap(self.size())
+            bmp.fill(Qt.GlobalColor.color0)
+            p = QPainter(bmp)
+            p.setBrush(Qt.GlobalColor.color1)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(bmp.rect(), 18, 18)
+            p.end()
+            self.setMask(bmp)
+        except Exception:
+            pass
+        # reposition floating debug overlay
+        try:
+            if hasattr(self, 'debug_terminal_container') and self.debug_terminal_container is not None:
+                self._position_debug_overlay()
+        except Exception:
+            pass
+        # reposition terms overlay if present
         try:
             if hasattr(self, "_terms_overlay") and self._terms_overlay is not None:
                 try:
@@ -744,13 +868,16 @@ class MainWindow(QMainWindow):
             if hasattr(fileio, 'hrt_beacon_label') and fileio.hrt_beacon_label is not None:
                 try:
                     fileio.hrt_beacon_label.setText('HRT: Connected')
-                    fileio.hrt_beacon_label.setStyleSheet('background-color: #00FF00; border-radius: 6px; padding:4px;')
+                    fileio.hrt_beacon_label.setStyleSheet(
+                        'background-color: #4FC3FF; color: #000000;'
+                        ' border: 1px solid #000000; border-radius: 6px; padding: 4px;'
+                    )
                     try:
                         fileio.hrt_beacon_label.setToolTip(
                             "Hot Rod Tuner Link Status\n\n"
-                            "● Green — HQSPG is linked to Hot Rod Tuner.\n"
+                            "● Blue — HQSPG is linked to Hot Rod Tuner.\n"
                             "   If your system overheats, Hot Rod Tuner may safely close HQSPG.\n\n"
-                            "○ Red — Not linked.\n"
+                            "○ Purple — Not linked.\n"
                             "   HQSPG will run normally, and Hot Rod Tuner will not manage it.\n\n"
                             "Linking is optional. Hot Rod Tuner is a separate safety app that "
                             "monitors your system and can close connected apps to protect hardware."
@@ -771,13 +898,16 @@ class MainWindow(QMainWindow):
             if hasattr(fileio, 'hrt_beacon_label') and fileio.hrt_beacon_label is not None:
                 try:
                     fileio.hrt_beacon_label.setText('HRT: Not linked')
-                    fileio.hrt_beacon_label.setStyleSheet('background-color: #FF0000; border-radius: 6px; padding:4px;')
+                    fileio.hrt_beacon_label.setStyleSheet(
+                        'background-color: #9040C8; color: #000000;'
+                        ' border: 1px solid #000000; border-radius: 6px; padding: 4px;'
+                    )
                     try:
                         fileio.hrt_beacon_label.setToolTip(
                             "Hot Rod Tuner Link Status\n\n"
-                            "● Green — HQSPG is linked to Hot Rod Tuner.\n"
+                            "● Blue — HQSPG is linked to Hot Rod Tuner.\n"
                             "   If your system overheats, Hot Rod Tuner may safely close HQSPG.\n\n"
-                            "○ Red — Not linked.\n"
+                            "○ Purple — Not linked.\n"
                             "   HQSPG will run normally, and Hot Rod Tuner will not manage it.\n\n"
                             "Linking is optional. Hot Rod Tuner is a separate safety app that "
                             "monitors your system and can close connected apps to protect hardware."

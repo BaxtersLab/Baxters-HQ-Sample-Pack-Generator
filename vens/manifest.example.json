@@ -1,5 +1,0 @@
-{
-  "ANTIGRAVITY": { "paths": ["/vens/plans/*","/vens/tasks/*"], "ops": ["read","write","append"] },
-  "COPILOT": { "paths": ["/vens/messages/to_copilot.*","/vens/tasks/*"], "ops": ["read","write"] },
-  "HUMAN": { "paths": ["/vens/*"], "ops": ["read","write","append","move"] }
-}

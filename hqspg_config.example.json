@@ -1,4 +1,5 @@
 {
+  "_comment": "Copy this file to hqspg_config.json — it is auto-generated on first launch if absent.",
   "paths": {
     "input_files": [],
     "output_folder": null,
@@ -29,5 +30,5 @@
     "port": 8080,
     "autolink_enabled": true
   },
-  "terms_accepted": true
+  "terms_accepted": false
 }

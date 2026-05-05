@@ -1,12 +1,12 @@
 from typing import Optional
 from collections import deque
 from PySide6.QtCore import QDateTime
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from bspg.core.config import AppConfig
 from bspg.core.logging import BSPGLogger, bspg_logger
 
-from PySide6.QtCore import QObject, Signal, QThread, QTimer
+from PySide6.QtCore import QObject, Signal, QThread, QTimer, QEvent
 
 from bspg.backend_adapter.cli_runner import BackendRunner
 from bspg.backend_adapter.output_parser import BackendOutputParser
@@ -81,6 +81,18 @@ class GUIController:
             except Exception:
                 self.output_parser = None
 
+    class _UIRelay(QObject):
+        """Thin QObject bridge that lives in the main thread.
+
+        Because GUIController is not a QObject, signals connected directly to
+        its methods use a *direct* connection and fire on the worker thread.
+        Routing through this relay forces Qt to use a *queued* connection for
+        the worker → relay hop, so relay signals are emitted on the main thread
+        and the plain-Python callbacks below are then called safely.
+        """
+        sig_output_line = Signal(str)
+        sig_finished = Signal(int)
+
     class _BackendWorker(QObject):
         sig_output_line = Signal(str)
         sig_finished = Signal(int)
@@ -113,15 +125,49 @@ class GUIController:
             self.config = config
 
         def run(self):
+            import traceback as _tb
+            import os as _os, datetime as _dt
+
+            # File-based crash log — survives GUI process death
+            _log_dir = _os.path.join(
+                _os.path.dirname(_os.path.abspath(__file__)),
+                '..', '..', '..', '..', 'pipeline_crash.log'
+            )
+            _log_path = _os.path.normpath(_log_dir)
+            def _flog(*msgs):
+                try:
+                    with open(_log_path, 'a', encoding='utf-8') as _f:
+                        _f.write(f"[{_dt.datetime.now().isoformat()}] " + " ".join(str(m) for m in msgs) + "\n")
+                        _f.flush()
+                except Exception:
+                    pass
+
+            _flog("=== PipelineWorker.run() START ===")
             try:
-                res = self.runner.run_pipeline(self.config)
+                _flog("calling run_pipeline")
+                def _progress_cb(msg):
+                    try:
+                        self.sig_output_line.emit(msg)
+                    except Exception:
+                        pass
+                res = self.runner.run_pipeline(self.config, progress_callback=_progress_cb)
+                _flog(f"run_pipeline returned exit_code={getattr(res,'exit_code','?')}")
                 for l in getattr(res, 'raw_output', []) or []:
                     self.sig_output_line.emit(l)
+                    _flog("OUT:", l)
                 for l in getattr(res, 'raw_error', []) or []:
                     self.sig_output_line.emit(l)
+                    _flog("ERR:", l)
                 exit_code = getattr(res, 'exit_code', 0)
-            except Exception:
+            except Exception as exc:
+                tb_text = _tb.format_exc()
+                _flog("EXCEPTION:", tb_text)
+                print('[PIPELINE ERROR]', tb_text, flush=True)
+                for line in tb_text.splitlines():
+                    self.sig_output_line.emit(line)
+                self.sig_output_line.emit(f'PIPELINE ERROR: {exc}')
                 exit_code = 1
+            _flog(f"=== PipelineWorker.run() END exit_code={exit_code} ===")
             self.sig_finished.emit(int(exit_code))
 
     def init_hooks(self):
@@ -175,15 +221,14 @@ class GUIController:
             except Exception:
                 pass
 
-        # Terms acceptance gating: defer check until event loop runs so GUI is fully constructed
+        # Flowchart checkbox → debug terminal logging
         try:
-            QTimer.singleShot(0, self.check_terms_gate)
+            fw = getattr(self.main_window, 'flowchart_widget', None)
+            if fw is not None and hasattr(fw, 'sig_checkbox_changed'):
+                fw.sig_checkbox_changed.connect(self._on_flowchart_checkbox_changed)
         except Exception:
-            try:
-                # fallback to immediate call if timers unavailable
-                self.check_terms_gate()
-            except Exception:
-                pass
+            pass
+
         # start HRT autolink in background (non-blocking) if enabled in config
         try:
             hrt_cfg = getattr(self.app_config, 'hrt', None)
@@ -201,124 +246,108 @@ class GUIController:
         except Exception:
             pass
 
-    # --- Module H: Legal gating stubs & logic (H-1..H-4) ---
+    # --- Module H: Legal gating ---
     def is_terms_accepted(self) -> bool:
         try:
-            val = bool(getattr(self.app_config, 'terms_accepted', False))
-            try:
-                # debug trace for acceptance flag load
-                self.log_debug(f"DEBUG: loaded terms_accepted from config: {getattr(self.app_config, 'terms_accepted', None)}")
-            except Exception:
-                try:
-                    print("DEBUG: loaded terms_accepted from config:", getattr(self.app_config, 'terms_accepted', None))
-                except Exception:
-                    pass
-            return val
+            return bool(getattr(self.app_config, 'terms_accepted', False))
         except Exception:
             return False
+
+    def _get_run_button(self):
+        """Return the run button widget, or None."""
+        try:
+            top_run = getattr(self.main_window, 'top_lane_run', None)
+            if top_run is not None:
+                return getattr(top_run, 'run_button', None)
+        except Exception:
+            pass
+        return None
 
     def check_terms_gate(self):
-        """
-        Called at startup. If terms are not accepted, trigger the view modal
-        and lock features. For H-1 this is a stub; H-2 implements modal behavior.
-        """
-        try:
-            # debug trace when checking gate
+        """Disable or enable the run button based on legal acceptance state."""
+        btn = self._get_run_button()
+        if btn is None:
+            return
+        if self.is_terms_accepted():
+            btn.setEnabled(True)
+            btn.setToolTip('')
+            # Remove event filter if one was installed
             try:
-                self.log_debug(f"DEBUG: terms_accepted = {self.is_terms_accepted()}")
+                if hasattr(self, '_terms_gate_filter'):
+                    btn.parent().removeEventFilter(self._terms_gate_filter)
             except Exception:
-                try:
-                    print("DEBUG: terms_accepted =", self.is_terms_accepted())
-                except Exception:
-                    pass
+                pass
+        else:
+            btn.setEnabled(False)
+            btn.setToolTip('You must acknowledge the Legal Agreement before running.')
+            # Install event filter on parent to catch mouse-press attempts on disabled button
+            try:
+                self._terms_gate_filter = self._TermsGateFilter(btn, self._show_terms_required_message)
+                if btn.parent():
+                    btn.parent().installEventFilter(self._terms_gate_filter)
+            except Exception:
+                pass
 
-            if not self.is_terms_accepted():
-                # Enable the blocking overlay to lock features until terms accepted
-                try:
-                    self.log_debug("NOTICE: Terms not accepted, applying feature lock.")
-                except Exception:
-                    print("NOTICE: Terms not accepted, applying feature lock.")
-                
-                # Soft lockout: show overlay + pulse settings button
-                try:
-                    if hasattr(self.main_window, 'disable_all_features_except_settings'):
-                        self.main_window.disable_all_features_except_settings()
-                except Exception:
-                    pass
-                
-                # Do not auto-navigate to settings on startup; keep main window visible
-                # User will press pulsing Settings button to open legal dialog.
-                return False
+    def _show_terms_required_message(self):
+        """Show a message box when the user attempts to click the locked run button."""
+        try:
+            QMessageBox.warning(
+                None,
+                'Legal Agreement Required',
+                'User Must Accept Legal Terms\n\nPlease open Settings and click\n"Permanently Acknowledge Legal Agreement" to unlock the run button.',
+            )
         except Exception:
             pass
-        return True
 
-    def enforce_terms_gate(self):
-        """Enforce gate at action time; returns True if allowed."""
-        try:
-            return self.is_terms_accepted()
-        except Exception:
+    class _TermsGateFilter(QObject):
+        """Event filter installed on the run button\'s parent to detect clicks on the disabled run button."""
+        def __init__(self, watched_btn, callback):
+            super().__init__(watched_btn.parent())
+            self._btn = watched_btn
+            self._callback = callback
+
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.MouseButtonPress:
+                try:
+                    btn_rect = self._btn.rect().translated(self._btn.pos())
+                    if btn_rect.contains(event.pos()) and not self._btn.isEnabled():
+                        self._callback()
+                        return True  # eat the event so nothing else fires
+                except Exception:
+                    pass
             return False
 
+    def enforce_terms_gate(self):
+        """Returns True if terms are accepted."""
+        return self.is_terms_accepted()
+
     def lock_features(self):
-        """Disable features except settings via the view helper."""
-        try:
-            if hasattr(self.main_window, 'disable_all_features_except_settings'):
-                try:
-                    self.main_window.disable_all_features_except_settings()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        """No-op stub — kept so old call-sites don\'t crash."""
+        pass
 
     def legal_acceptance_checkbox_changed(self, accepted: bool):
-        """UI-level: user toggled acceptance checkbox. Update in-memory flag."""
-        try:
-            try:
-                self.app_config.terms_accepted = bool(accepted)
-            except Exception:
-                pass
-        except Exception:
-            pass
+        """Legacy stub — kept so old connections don\'t crash."""
+        pass
 
     def legal_acceptance_save_requested(self):
-        """Persist acceptance and update gating/unlock UI."""
+        """Persist the legal acceptance flag to disk, then unlock the run button."""
         try:
-            # Persist
-            try:
-                if hasattr(self, 'save_config'):
-                    self.save_config()
-                else:
-                    # fallback to app_config.save
-                    if hasattr(self.app_config, 'save'):
-                        self.app_config.save()
-            except Exception:
-                pass
-
-            # Unlock UI if accepted
-            if self.is_terms_accepted():
-                try:
-                    if hasattr(self.main_window, 'enable_all_features'):
-                        self.main_window.enable_all_features()
-                except Exception:
-                    pass
-                try:
-                    if hasattr(self.main_window, 'remove_terms_overlay'):
-                        try:
-                            self.main_window.remove_terms_overlay()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            else:
-                try:
-                    self.lock_features()
-                    if hasattr(self.main_window, 'show_terms_required_modal'):
-                        self.main_window.show_terms_required_modal()
-                except Exception:
-                    pass
+            self.app_config.terms_accepted = True
         except Exception:
             pass
+        try:
+            if hasattr(self, 'save_config'):
+                self.save_config()
+            elif hasattr(self.app_config, 'save'):
+                self.app_config.save()
+        except Exception:
+            pass
+        # Unlock run button now that terms are accepted
+        self.check_terms_gate()
+
+    def _unlock_run_button(self):
+        """Alias for check_terms_gate — re-evaluates gate state."""
+        self.check_terms_gate()
 
     # --- Module I: HRT auto-link callback ---
     def on_hrt_link_success(self):
@@ -584,10 +613,14 @@ class GUIController:
         # Keep backward compatibility: call prepare_and_run if available
         try:
             return self.prepare_and_run()
-        except Exception:
-            pass
+        except Exception as _e:
+            self.logger.error('gui', f'prepare_and_run raised: {_e}')
 
-        # If prepare_and_run failed or is not present, fall back to previous behavior
+        # If prepare_and_run failed, fall back to launching backend directly
+        self._launch_backend_worker()
+
+    def _launch_backend_worker(self):
+        """Initialise backend and spin up the pipeline worker thread."""
         try:
             # Sync flowchart → config before running
             self.sync_flowchart_to_config()
@@ -597,10 +630,8 @@ class GUIController:
 
             # Start backend pipeline (prefer run_pipeline) in a worker thread (non-blocking)
             if self.backend_runner is not None and hasattr(self.backend_runner, 'run_pipeline'):
-                # use pipeline worker
                 worker = self._PipelineWorker(self.backend_runner, self.app_config)
             else:
-                # fallback to raw CLI worker
                 args = []
                 if self.backend_runner is not None:
                     args = self.backend_runner.build_command(self.app_config)
@@ -609,23 +640,39 @@ class GUIController:
             thread = QThread()
             worker.moveToThread(thread)
 
-            # wire signals
+            # Route worker signals through a main-thread QObject relay so that
+            # on_backend_output / on_backend_finished are always called on the
+            # main thread (GUIController is not a QObject → direct connection
+            # without relay would fire callbacks in the worker thread).
+            relay = self._UIRelay()
+            self._ui_relay = relay  # keep reference so it isn't GC'd
+
             thread.started.connect(worker.run)
-            worker.sig_output_line.connect(self.on_backend_output)
-            worker.sig_finished.connect(self.on_backend_finished)
+            worker.sig_output_line.connect(relay.sig_output_line)   # queued: worker → main
+            relay.sig_output_line.connect(self.on_backend_output)   # direct:  main  → main
+            worker.sig_finished.connect(relay.sig_finished)         # queued: worker → main
+            relay.sig_finished.connect(self.on_backend_finished)    # direct:  main  → main
             worker.sig_finished.connect(thread.quit)
             worker.sig_finished.connect(worker.deleteLater)
             thread.finished.connect(thread.deleteLater)
+            # NOTE: relay is intentionally NOT connected to deleteLater here.
+            # Deleting the relay while sig_finished is still dispatching causes
+            # a segfault on Windows.  on_backend_finished cleans it up instead.
 
             thread.start()
-            # keep reference to thread so it isn't garbage-collected
             self._backend_thread = thread
             self._backend_worker = worker
-        except Exception:
-            self.logger.error('gui', 'Failed to start backend worker')
+        except Exception as _e:
+            self.logger.error('gui', f'Failed to start backend worker: {_e}')
 
     def prepare_and_run(self):
         """Full pre-run sequence: validate, sync, reset, then run."""
+
+        # Gate: terms must be acknowledged before running
+        if not self.is_terms_accepted():
+            self._show_terms_required_message()
+            return
+
         self.logger.info('gui', 'Preparing pipeline run.')
 
         # Sync settings → config
@@ -637,6 +684,23 @@ class GUIController:
         # Sync flowchart → config
         try:
             self.sync_flowchart_to_config()
+        except Exception:
+            pass
+
+        # Gate: at least one flowchart checkbox must be checked
+        try:
+            fc = getattr(self.app_config, 'flowchart', None)
+            if fc is not None:
+                any_checked = any(
+                    getattr(fc, f'cb{i}', False) for i in range(1, 9)
+                )
+                if not any_checked:
+                    QMessageBox.warning(
+                        None,
+                        'No Pipeline Stage Selected',
+                        'No boxes checked.\n\nPlease select at least one stage on the flowchart before running.',
+                    )
+                    return
         except Exception:
             pass
 
@@ -669,10 +733,9 @@ class GUIController:
 
         # Start backend
         try:
-            # reuse existing on_run_clicked machinery
-            return self.on_run_clicked()
-        except Exception:
-            self.logger.error('gui', 'Failed to start run after preparation.')
+            return self._launch_backend_worker()
+        except Exception as _e:
+            self.logger.error('gui', f'Failed to start run after preparation: {_e}')
             try:
                 self.post_run_cleanup(None)
             except Exception:
@@ -825,12 +888,16 @@ class GUIController:
                 try:
                     self.app_config.paths.input_files = files
                 except Exception:
-                    # fallback for older AppConfig shapes
                     try:
                         self.app_config.input_files = files
                     except Exception:
                         pass
                 self.logger.info('gui', f'Selected input files: {files}')
+                # update display box
+                try:
+                    self.main_window.top_lane_fileio.set_input_files_display(files)
+                except Exception:
+                    pass
         except Exception:
             pass
     def on_output_folder_clicked(self):
@@ -847,8 +914,22 @@ class GUIController:
                     except Exception:
                         pass
                 self.logger.info('gui', f'Selected output folder: {folder}')
+                # update display box
+                try:
+                    self.main_window.top_lane_fileio.set_output_folder_display(folder)
+                except Exception:
+                    pass
         except Exception:
             pass
+
+    def _on_flowchart_checkbox_changed(self, msg: str):
+        """Route flowchart checkbox toggle messages to the debug terminal."""
+        try:
+            if hasattr(self.main_window, 'log_debug_message'):
+                self.main_window.log_debug_message(msg)
+        except Exception:
+            pass
+
     def sync_flowchart_to_config(self):
         """Sync flowchart checkbox states to AppConfig with gating logic."""
         if not hasattr(self.main_window, 'flowchart_widget'):
@@ -1078,6 +1159,12 @@ class GUIController:
                     self.main_window.top_lane_fileio.update_thermometer(progress)
                 except Exception:
                     pass
+            # Progress bar
+            if hasattr(self.main_window, 'top_lane_run') and progress is not None:
+                try:
+                    self.main_window.top_lane_run.update_progress(progress)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -1087,6 +1174,10 @@ class GUIController:
             if hasattr(self.main_window, 'top_lane_run'):
                 try:
                     self.main_window.top_lane_run.update_status('Starting')
+                except Exception:
+                    pass
+                try:
+                    self.main_window.top_lane_run.reset_progress()
                 except Exception:
                     pass
             if hasattr(self.main_window, 'top_lane_fileio'):
@@ -1133,7 +1224,28 @@ class GUIController:
             pass
 
     def on_backend_output(self, line: str):
-        """Handle raw backend output lines: parse and update GUI."""
+        """Handle raw backend output lines: forward to debug terminal, stdout, and parser."""
+        # Always print to the launch terminal so nothing is invisible
+        print(f'[pipeline] {line}', flush=True)
+
+        # Forward to in-app debug terminal widget if present
+        try:
+            mw = getattr(self, 'main_window', None)
+            if mw is not None:
+                if hasattr(mw, 'log_debug_message'):
+                    try:
+                        mw.log_debug_message(line)
+                    except Exception:
+                        pass
+                elif hasattr(mw, 'debug_terminal_widget'):
+                    try:
+                        mw.debug_terminal_widget.append(line)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Also run through output parser for status/progress updates
         try:
             if self.output_parser is not None:
                 evt = self.output_parser.parse_line(line)
@@ -1143,13 +1255,13 @@ class GUIController:
                 except Exception:
                     pass
             else:
-                # fallback: emit to logger
                 self.logger.info('backend', line)
         except Exception:
             pass
 
     def on_backend_finished(self, exit_code: int):
         """Handle backend completion, update state, handle errors, and cleanup."""
+        print(f'[pipeline] finished exit_code={exit_code}', flush=True)
         try:
             state = None
             if self.output_parser is not None:
@@ -1164,16 +1276,36 @@ class GUIController:
             except Exception:
                 pass
 
-            # Error handling (basic)
+            # Error handling — print and forward to debug terminal
             try:
                 if exit_code != 0 or (hasattr(state, 'error') and getattr(state, 'error') is not None):
-                    self.logger.error('pipeline', f'Pipeline finished with errors: exit={exit_code}')
+                    err_detail = getattr(state, 'error', None) or f'exit code {exit_code}'
+                    msg = f'Pipeline finished with errors: {err_detail}'
+                    print(f'[ERROR] {msg}', flush=True)
+                    self.logger.error('pipeline', msg)
+                    try:
+                        mw = getattr(self, 'main_window', None)
+                        if mw is not None and hasattr(mw, 'log_debug_message'):
+                            mw.log_debug_message(f'ERROR: {msg}')
+                    except Exception:
+                        pass
+                else:
+                    print('[pipeline] SUCCESS', flush=True)
             except Exception:
                 pass
 
             # Cleanup
             try:
                 self.post_run_cleanup(state)
+            except Exception:
+                pass
+
+            # Safe relay teardown — now that all signal dispatching is done
+            try:
+                relay = getattr(self, '_ui_relay', None)
+                if relay is not None:
+                    relay.deleteLater()
+                    self._ui_relay = None
             except Exception:
                 pass
 

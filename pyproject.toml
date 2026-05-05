@@ -1,27 +1,29 @@
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
- [project]
- name = "hqspg"
- version = "0.1.0"
- description = "HQ Sample Pack Generator — Demucs + StemRepair + Extractor"
- authors = [ { name = "Baxter" } ]
- readme = "README.md"
- requires-python = ">=3.10"
 
-license = { file = "LICENSE" }
+[project]
+name = "hqspg"
+version = "0.1.0"
+description = "HQ Sample Pack Generator — Demucs + StemRepair + Extractor"
+authors = [ { name = "Baxter" } ]
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
 keywords = ["audio", "demucs", "separation", "stems", "samples", "hqspg"]
-
-[project.classifiers]
-# PEP 301 classifiers list
-# Use as a sequence for tools; setuptools will accept this under [project].
 classifiers = [
 	"Development Status :: 4 - Beta",
 	"Intended Audience :: Developers",
-	"License :: OSI Approved :: MIT License",
 	"Programming Language :: Python :: 3",
 	"Programming Language :: Python :: 3.10",
 	"Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+	"PySide6",
+	"numpy",
+	"scipy",
+	"demucs",
+	"torch",
 ]
 
 [project.urls]
@@ -29,19 +31,15 @@ Homepage = "https://github.com/your-org/hqspg"
 Repository = "https://github.com/your-org/hqspg"
 Documentation = "https://github.com/your-org/hqspg#readme"
 
- [project.dependencies]
- PySide6 = "*"
- numpy = "*"
- scipy = "*"
- demucs = "*"
- torch = "*"
+[project.scripts]
+hqspg = "hqspg.cli:main"
 
- [tool.pytest.ini_options]
- minversion = "6.0"
- addopts = "-q"
+[project.optional-dependencies]
+dev = ["pytest"]
 
- [project.scripts]
- hqspg = "hqspg.cli:main"
+[tool.setuptools.packages.find]
+include = ["hqspg*"]
 
- [project.optional-dependencies]
- dev = ["pytest"]
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-q"

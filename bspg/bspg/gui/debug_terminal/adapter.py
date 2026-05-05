@@ -18,12 +18,11 @@ class DebugTerminalSinkAdapter(DebugSink):
         try:
             line = f"[{log.level}] {log.source}: {log.message}"
             if hasattr(self.terminal, 'append_log'):
+                # append_log is thread-safe (routes via queue+timer)
                 self.terminal.append_log(line)
             else:
-                try:
-                    # fallback for QTextEdit-like objects
-                    self.terminal.append(line)
-                except Exception:
-                    pass
+                # Fallback for plain QTextEdit — avoid direct cross-thread call.
+                # append_log not available so we silently drop rather than risk a crash.
+                pass
         except Exception:
             return

@@ -1,3 +1,6 @@
+import queue as _queue
+
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget, QTextEdit, QVBoxLayout
 
 from bspg.core.logging import DebugSink, LogMessage, bspg_logger
@@ -9,8 +12,29 @@ class DebugTerminalWidget(QWidget):
         self.logger = logger or bspg_logger
         self.initialized = False
         self.sink_registered = False
+
+        # Thread-safe message queue.  Any thread may call append_log() and
+        # put lines here.  A QTimer drains it on the main thread so Qt
+        # widget updates never happen on a background thread.
+        self._pending: _queue.Queue = _queue.Queue()
+        self._drain_timer = QTimer(self)
+        self._drain_timer.setInterval(80)
+        self._drain_timer.timeout.connect(self._drain_pending)
+        self._drain_timer.start()
+
         self.init_ui()
         self.register_sink()
+
+    def _drain_pending(self):
+        """Called by QTimer on the main thread every 80 ms."""
+        if not hasattr(self, 'text_area'):
+            return
+        try:
+            while True:
+                line = self._pending.get_nowait()
+                self.text_area.append(line)
+        except _queue.Empty:
+            pass
 
     def init_ui(self):
         if getattr(self, 'initialized', False):
@@ -20,7 +44,12 @@ class DebugTerminalWidget(QWidget):
         if not hasattr(self, 'text_area'):
             self.text_area = QTextEdit(self)
             self.text_area.setReadOnly(True)
+            self.text_area.setStyleSheet(
+                'QTextEdit { background-color: #000000; color: #4FC3FF;'
+                ' border: none; font-family: Consolas, "Courier New", monospace; font-size: 11px; }'
+            )
             layout = QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(self.text_area)
             self.setLayout(layout)
 
@@ -37,16 +66,22 @@ class DebugTerminalWidget(QWidget):
                 try:
                     self.outer.append_log(log)
                 except Exception:
-                    # avoid raising from sink
                     return
 
         self.sink = _Sink(self)
         self.logger.router.add_sink(self.sink)
 
-    def append_log(self, log: LogMessage):
-        line = f"[{log.level}] {log.source}: {log.message}"
-        if hasattr(self, 'text_area'):
-            self.text_area.append(line)
+    def append_log(self, log_or_str):
+        """Thread-safe: may be called from any thread.
+
+        Puts the formatted line into a queue; the main-thread QTimer drains
+        it into the QTextEdit — no cross-thread Qt calls ever occur.
+        """
+        if isinstance(log_or_str, str):
+            line = log_or_str
+        else:
+            line = f"[{log_or_str.level}] {log_or_str.source}: {log_or_str.message}"
+        self._pending.put(line)
 
     def clear(self):
         if hasattr(self, 'text_area'):

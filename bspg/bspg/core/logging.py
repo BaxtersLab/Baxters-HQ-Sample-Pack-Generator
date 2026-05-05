@@ -73,6 +73,14 @@ class BSPGLogger:
 		self.router.log(LogLevel.CRITICAL, source, message)
 
 
+class PrintSink(DebugSink):
+	"""Default sink: writes every log message to stdout so it always appears
+	in the launch terminal, regardless of which GUI sinks are registered."""
+	def emit(self, log: LogMessage) -> None:
+		print(f'[{log.level}] ({log.source}) {log.message}', flush=True)
+
+
 # module-level router and logger instance
 router = LogRouter()
+router.add_sink(PrintSink())   # always print to stdout
 bspg_logger = BSPGLogger(router)

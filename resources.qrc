@@ -1,6 +1,0 @@
-<RCC>
-  <qresource prefix="/">
-    <!-- expose the existing HQSPG backdrop under the resource path :/assets/background.png -->
-    <file alias="assets/background.png">hqspg/assets/BHQSPGBackdrop.png</file>
-  </qresource>
-</RCC>

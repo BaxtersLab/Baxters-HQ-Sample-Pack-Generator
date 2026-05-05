@@ -22,6 +22,10 @@ class SettingsConfig:
 class ChopConfig:
     silence_threshold: float = 0.01
     transient_sensitivity: float = 1.5
+    pre_ms: int = 20
+    post_ms: int = 80
+    min_slice_ms: int = 50
+    max_slice_ms: int = 10000
 
 
 @dataclass
@@ -42,7 +46,7 @@ class HRTConfig:
     manual_override: bool = False
     connected: bool = False
     host: str = '127.0.0.1'
-    port: int = 8080
+    port: int = 8090
     autolink_enabled: bool = True
 
 

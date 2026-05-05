@@ -118,6 +118,103 @@ yarn-error.log*
 # Internal push notes (do not commit)
 push_notes.md
 
+# Personal runtime config (example version is committed instead)
+hqspg_config.json
+
+# User output folder
+output folder/
+
+# Test audio/output (local generated content)
+test_audio/
+test_output/
+
+# ──────────────────────────────────────────────
+# Personal / workspace-private files
+# ──────────────────────────────────────────────
+
+# Ven's Constitution orchestrator (personal AI system)
+vens/
+vens_constitution.txt
+vens_folders_structure.txt
+
+# Internal dev/audit notes not meant for public consumption
+DEV_NOTE_FOR_AGENT.md
+GUI_AUDIT_REPORT.md
+GUI_FIXES_COMPLETED.md
+WINDOWS_MIGRATION_FIXES.md
+
+# Runtime user config — contains terms_accepted state, last-used paths, etc.
+# Commit hqspg_config.example.json instead.
+hqspg_config.json
+
+# Test configs that contain local/absolute paths
+config/hqspg_test_run.yaml
+
+# Diagnostic screenshots captured during dev
+Capture.JPG
+diag_window.png
+gui_flowchart_test.png
+
+# Generated test outputs
+test_output/
+
+# Junk/duplicate files in assets
+hqspg/assets/asd.JPG
+hqspg/assets/Capture.JPG
+hqspg/assets/Capture - Copy.JPG
+hqspg/assets/BHQSPGBackdrop - Copy.png
+hqspg/assets/BHQSPGBackdrop - Copy (2).png
+
+# ──────────────────────────────────────────────
+# Dead legacy code (superseded by bspg/ package)
+# ──────────────────────────────────────────────
+
+# Old monolithic GUI layer — replaced by bspg/bspg/gui/ (styles.qss stays)
+gui/__init__.py
+gui/advanced_panel.py
+gui/collapsible_drawer.py
+gui/controller.py
+gui/debug_terminal.py
+gui/hrt_status_widget.py
+gui/log.py
+gui/main.py
+gui/main_window.py
+gui/resources_rc.py
+gui/settings_panel.py
+gui/widgets.py
+gui/workers.py
+
+# Old hqspg Python package — replaced by bspg/bspg/backend_adapter/ (assets/ stays)
+hqspg/__init__.py
+hqspg/_version.py
+hqspg/cli.py
+hqspg/extract.py
+hqspg/extractor.py
+hqspg/integration/hotrod_connector.py
+hqspg/loader.py
+hqspg/pipeline.py
+hqspg/README.md
+hqspg/repair.py
+hqspg/separator.py
+hqspg/tests/
+
+# Qt resources file only used by dead gui/ layer
+resources.qrc
+
+# Linux test script with hardcoded personal path
+test_gui.sh
+
+# ──────────────────────────────────────────────
+# Internal / personal dev tools
+# ──────────────────────────────────────────────
+tools/copy_to_external.py
+tools/generate_qwen_profile.py
+tools/gui_inspect.py
+tools/import_check.py
+tools/inspect_windows.py
+tools/package_for_external.py
+tools/preview_config.yaml
+
 # Virtual env
 .venv/
 

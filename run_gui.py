@@ -1,10 +1,12 @@
- # --- Ensure bspg package is importable regardless of launch directory ---
+ # --- Ensure bspg and hqspg packages are importable regardless of launch directory ---
 import sys, os
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BSPG_PATH = os.path.join(ROOT, "bspg")
 
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)          # makes `hqspg` importable
 if BSPG_PATH not in sys.path:
-    sys.path.insert(0, BSPG_PATH)
+    sys.path.insert(0, BSPG_PATH)     # makes `bspg` importable
 
 from PySide6.QtWidgets import QApplication
 import atexit
@@ -137,6 +139,29 @@ def main():
 
     print('DEBUG: creating QApplication', flush=True)
     app = QApplication(sys.argv)
+
+    # --- App identity: name + icon so Task Manager shows BaxtersHQSPG, not python ---
+    app.setApplicationName('BaxtersHQSPG')
+    app.setApplicationDisplayName("Baxter's HQ Sample Pack Generator")
+    app.setOrganizationName('BaxtersHQ')
+
+    _ICON_PATH = os.path.join(ROOT, 'hqspg', 'assets', 'hqspg_icon.ico')
+    if os.path.isfile(_ICON_PATH):
+        from PySide6.QtGui import QIcon
+        _app_icon = QIcon(_ICON_PATH)
+        app.setWindowIcon(_app_icon)
+    else:
+        _app_icon = None
+
+    # Windows: set AppUserModelID so the taskbar groups by app name, not python.exe
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('BaxtersHQ.HQSPG.1')
+        except Exception:
+            pass
+    # -----------------------------------------------------------------------
+
     # Load AppConfig once at startup and pass the instance into the MainWindow
     try:
         from bspg.core.config import AppConfig
@@ -151,6 +176,12 @@ def main():
     print('DEBUG: instantiating MainWindow', flush=True)
     win = MainWindow(app_config=app_conf)
     print('DEBUG: MainWindow instantiated', flush=True)
+
+    # Apply icon to the main window as well
+    if _app_icon is not None:
+        win.setWindowIcon(_app_icon)
+    win.setWindowTitle("Baxter's HQ Sample Pack Generator")
+
     win.show()
     print('DEBUG: window show() called', flush=True)
     # --- FORCE WINDOW ON-SCREEN ---

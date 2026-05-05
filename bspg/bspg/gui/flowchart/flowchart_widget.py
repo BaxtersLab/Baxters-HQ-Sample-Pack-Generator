@@ -10,6 +10,8 @@ class FlowchartWidget(QWidget):
 
     # Emitted when the gear (settings) button is clicked
     gear_clicked = Signal()
+    # Emitted on every checkbox toggle — carries a human-readable gate message
+    sig_checkbox_changed = Signal(str)
     """
     4-Lane signal routing flowchart showing audio path through pipeline.
     
@@ -49,11 +51,12 @@ class FlowchartWidget(QWidget):
         # Main vertical layout for 4 horizontal lanes (rows)
         if not self.layout():
             main_layout = QVBoxLayout(self)
-            main_layout.setContentsMargins(10, 15, 10, 15)
-            main_layout.setSpacing(20)
+            main_layout.setContentsMargins(10, 15, 10, 8)
+            main_layout.setSpacing(6)
             self.setLayout(main_layout)
         else:
             main_layout = self.layout()
+        self.setMinimumHeight(260)
 
         inner_layout = main_layout
 
@@ -102,7 +105,8 @@ class FlowchartWidget(QWidget):
         lane_layout.setContentsMargins(5, 8, 5, 8)
         lane_layout.setSpacing(15)
         lane_layout.setAlignment(Qt.AlignLeft)
-        lane_widget.setMinimumHeight(50)  # Ensure enough height for buttons
+        lane_widget.setMinimumHeight(60)
+        lane_widget.setMaximumHeight(70)
         
         # Handle routing lane (lane 4) specially
         if is_routing_lane:
@@ -148,6 +152,13 @@ class FlowchartWidget(QWidget):
                 }
             """)
             input_btn.setFixedHeight(35)
+            input_btn.setToolTip(
+                "Input Stem — Bring Your Own Stem\n\n"
+                "Load a pre-separated or custom stem file directly into the pipeline.\n"
+                "This bypasses the Stem Separation stage entirely.\n\n"
+                "Use Gate [4] to route this stem into Stem Repair.\n"
+                "Use Gate [7] to route this stem directly into Sample Chop (skip Repair)."
+            )
             lane_layout.addWidget(input_btn)
             
             # Add flow line after Input Stem
@@ -216,6 +227,36 @@ class FlowchartWidget(QWidget):
                 }
             """)
             node_btn.setFixedHeight(35)
+            # Node-specific tooltips
+            _node_tooltips = {
+                'Stem Sep': (
+                    "Stem Separation — Stage 1\n\n"
+                    "Runs Demucs (htdemucs_6s) on your input mix to separate it into:\n"
+                    "  vocals · drums · bass · guitar · piano · other\n\n"
+                    "Outputs raw stem files to: <output>/<song>_stems/\n"
+                    "Use Gate [1] to pass results to the next stage."
+                ),
+                'Stem Repair': (
+                    "Stem Repair — Stage 2\n\n"
+                    "Runs the HQ Glimmer Repair engine on separated stems.\n"
+                    "Detects and removes short high-frequency transient artifacts\n"
+                    "(glimmers) left behind by Demucs.\n\n"
+                    "Modes: fast (median spectral filter) · balanced (FFT inpainting)\n"
+                    "Outputs to: <output>/<song>_repaired/\n"
+                    "Use Gate [3] to pass results to Sample Chop."
+                ),
+                'Sample Chop': (
+                    "Sample Chop — Stage 3\n\n"
+                    "Slices stems into individual hit/sample files using:\n"
+                    "  · Silence detection (RMS envelope)\n"
+                    "  · Transient/onset detection (spectral flux)\n\n"
+                    "Each sample is zero-cross aligned, normalized, faded,\n"
+                    "and saved as: <song>_<stem>_NNNN.wav\n"
+                    "Outputs to: <output>/<song>_samples/<stem>/\n"
+                    "Use Gate [6] to write results to output folder."
+                ),
+            }
+            node_btn.setToolTip(_node_tooltips.get(label, ''))
             lane_layout.addWidget(node_btn)
             
             # Add flow line after Stem Sep (lane 1) or other buttons
@@ -257,6 +298,15 @@ class FlowchartWidget(QWidget):
                     }
                 """)
                 gear_btn.setFixedHeight(35)
+                gear_btn.setToolTip(
+                    "Sample Chop Settings\n\n"
+                    "Configure the slicing parameters for Stage 3:\n"
+                    "  · Silence threshold — minimum dB level treated as silence\n"
+                    "  · Min silence duration — shortest gap that counts as a cut point\n"
+                    "  · Transient sensitivity — how aggressively onset events are detected\n"
+                    "  · Min event length — discard slices shorter than this (ms)\n\n"
+                    "Changes take effect on the next run."
+                )
                 gear_btn.clicked.connect(self.gear_clicked)
                 lane_layout.addWidget(gear_btn)
 
@@ -274,14 +324,71 @@ class FlowchartWidget(QWidget):
     def _get_checkpoint_tooltip(self, idx):
         """Return tooltip description for each checkpoint."""
         tooltips = {
-            1: "Stem Separation output",
-            2: "Stem Sep → Stem Repair chain", 
-            3: "Stem Repair function",
-            4: "BYO Input stem (bypasses Stem Sep)",
-            5: "Repair → Sample Chop link",
-            6: "Sample Chop output gate",
-            7: "BYO → Sample Chop direct (bypass Repair)",
-            8: "Full Run auto-selector"
+            1: (
+                "Gate [1] — Stem Separation Output\n\n"
+                "✔ Checked: Separated stems are passed forward to the next stage.\n"
+                "✘ Unchecked: Stem Sep output is blocked — nothing proceeds from this stage.\n\n"
+                "Stage: 1 (Stem Separation)\n"
+                "Required if you want HQSPG to process any stems beyond raw separation."
+            ),
+            2: (
+                "Gate [2] — Stem Sep → Stem Repair Chain\n\n"
+                "✔ Checked: Freshly separated stems are fed into the Stem Repair engine.\n"
+                "✘ Unchecked: Separated stems skip Repair entirely.\n\n"
+                "Stage: 1 → 2 bridge\n"
+                "Mutual exclusion: Cannot be checked at the same time as [4] (BYO Input Stem).\n"
+                "If both are checked, [4] is automatically unchecked."
+            ),
+            3: (
+                "Gate [3] — Stem Repair Output\n\n"
+                "✔ Checked: Repaired stems pass forward (to Sample Chop or output folder).\n"
+                "✘ Unchecked: Repair runs but its output is blocked from proceeding.\n\n"
+                "Stage: 2 (Stem Repair / Glimmer Removal)\n"
+                "Stem Repair detects and removes short high-frequency transient artifacts (glimmers)\n"
+                "using fast median spectral filtering or balanced FFT inpainting."
+            ),
+            4: (
+                "Gate [4] — BYO Input Stem (Bypass Stem Sep)\n\n"
+                "✔ Checked: Your manually selected input file is used as the stem source,\n"
+                "           bypassing the Stem Separation stage entirely.\n"
+                "✘ Unchecked: Input file is not passed directly; normal pipeline applies.\n\n"
+                "Stage: 2 entry (direct)\n"
+                "Mutual exclusion: Cannot be checked with [2] (fresh sep path).\n"
+                "If both are checked, [4] is automatically unchecked."
+            ),
+            5: (
+                "Gate [5] — Repair → Sample Chop Link\n\n"
+                "✔ Checked: Repaired stems are fed into the Sample Chop (extraction) stage.\n"
+                "✘ Unchecked: Repaired stems stop here — no samples are extracted from them.\n\n"
+                "Stage: 2 → 3 bridge\n"
+                "Enable this to run a full Stage 1+2+3 pipeline."
+            ),
+            6: (
+                "Gate [6] — Sample Chop Output Gate\n\n"
+                "✔ Checked: Extracted samples are written to the output folder.\n"
+                "✘ Unchecked: Sample Chop runs but its output files are suppressed.\n\n"
+                "Stage: 3 (Sample Extraction)\n"
+                "Sample Chop detects silence and transient events, slices stems into\n"
+                "individual hit files, normalizes, applies fades, and names them:\n"
+                "<song>_<stem>_NNNN.wav"
+            ),
+            7: (
+                "Gate [7] — BYO → Sample Chop Direct (Bypass Repair)\n\n"
+                "✔ Checked: BYO Input Stem is sent directly to Sample Chop, skipping Stem Repair.\n"
+                "✘ Unchecked: BYO stem does not route to Sample Chop via this path.\n\n"
+                "Stage: BYO → 3 shortcut\n"
+                "Mutual exclusion: Cannot be checked with [2] (fresh sep path) or [4] (BYO→Repair).\n"
+                "If a conflicting gate is checked, [7] is automatically unchecked."
+            ),
+            8: (
+                "Gate [8] — Full Run Auto-Selector\n\n"
+                "✔ Checked: Enables the full automatic pipeline:\n"
+                "           Stem Sep → Repair → Sample Chop → Output.\n"
+                "           HQSPG selects the optimal path based on your input file.\n"
+                "✘ Unchecked: Manual gate configuration applies.\n\n"
+                "Stage: All (1 → 2 → 3)\n"
+                "Recommended for most users. Equivalent to enabling [1][2][3][5][6]."
+            ),
         }
         return tooltips.get(idx, f"Checkpoint {idx}")
 
@@ -291,6 +398,13 @@ class FlowchartWidget(QWidget):
         """Called when any flowchart checkbox is toggled. Applies gating then syncs config."""
         self._apply_gating_rules()
         self._sync_to_config()
+        try:
+            cb = getattr(self, f'flowchart_cb_{cb_id}', None)
+            state = cb.isChecked() if cb else False
+            verb = 'checked' if state else 'unchecked'
+            self.sig_checkbox_changed.emit(f'[Flowchart] Gate [{cb_id}] {verb}')
+        except Exception:
+            pass
 
     def _apply_gating_rules(self):
         """

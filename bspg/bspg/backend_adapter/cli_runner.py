@@ -127,43 +127,92 @@ class BackendRunner:
             self.logger.error('stage3', f'error: {e}')
             return []
 
-    def run_pipeline(self, config) -> BackendProcessResult:
-        """Simple 3-stage pipeline runner that executes stages sequentially.
+    def run_pipeline(self, config, progress_callback=None) -> BackendProcessResult:
+        """Run the full hqspg pipeline (separate → repair → extract) by calling
+        hqspg.cli.run_pipeline_for_file directly.
 
-        This is intentionally minimal: it finds the first input file from
-        `config.paths.input_files` and writes outputs under
-        `config.paths.output_folder` in `stage1/`, `stage2/`, `stage3/`.
+        `progress_callback(msg: str)` is forwarded to run_pipeline_for_file so
+        the GUI receives live stage-boundary updates.
         """
+        from hqspg.cli import run_pipeline_for_file
+
         paths = getattr(config, 'paths', None)
         if not paths or not getattr(paths, 'input_files', None):
             self.logger.error('pipeline', 'no input files')
             return BackendProcessResult(exit_code=1, raw_output=[], raw_error=['no input files'])
 
-        input_file = Path(paths.input_files[0])
-        base_out = Path(getattr(paths, 'output_folder', '.'))
-        stage1_out = base_out / 'stage1'
-        stage2_out = base_out / 'stage2'
-        stage3_out = base_out / 'stage3'
-        stage1_out.mkdir(parents=True, exist_ok=True)
-        stage2_out.mkdir(parents=True, exist_ok=True)
-        stage3_out.mkdir(parents=True, exist_ok=True)
+        input_file = str(Path(paths.input_files[0]))
+        base_out   = str(Path(getattr(paths, 'output_folder', '.')))
 
-        rc1 = self.run_stage1(str(input_file), str(stage1_out))
-        if rc1 != 0:
-            return BackendProcessResult(exit_code=rc1, raw_output=[], raw_error=['stage1 failed'])
+        # Build config dict from AppConfig fields
+        chop = getattr(config, 'chop', None)
+        extractor_cfg = {
+            'silence_threshold':    float(getattr(chop, 'silence_threshold',    0.01)),
+            'transient_sensitivity': float(getattr(chop, 'transient_sensitivity', 1.5)),
+            'pre_ms':               int(getattr(chop,   'pre_ms',               20)),
+            'post_ms':              int(getattr(chop,   'post_ms',              80)),
+            'min_slice_ms':         int(getattr(chop,   'min_slice_ms',         50)),
+            'max_slice_ms':         int(getattr(chop,   'max_slice_ms',         10000)),
+        }
 
-        # For placeholder flow, pick first file in stage1_out as input to stage2
-        stage1_files = list(stage1_out.iterdir())
-        if not stage1_files:
-            return BackendProcessResult(exit_code=1, raw_output=[], raw_error=['no files from stage1'])
-        stage2_in = stage1_files[0]
-        stage2_out_file = stage2_out / f'repaired{stage2_in.suffix}'
-        rc2 = self.run_stage2(str(stage2_in), str(stage2_out_file))
-        if rc2 != 0:
-            return BackendProcessResult(exit_code=rc2, raw_output=[], raw_error=['stage2 failed'])
+        cfg_dict = {
+            'separator': {'model': 'htdemucs_6s'},
+            'repair':    {'mode': 'balanced'},
+            'extractor': extractor_cfg,
+        }
 
-        outs = self.run_stage3(str(stage2_out_file), str(stage3_out), base_name='slice', count=1)
-        if not outs:
-            return BackendProcessResult(exit_code=1, raw_output=[], raw_error=['stage3 failed'])
+        self.logger.info('pipeline', f'Starting pipeline: {input_file} -> {base_out}')
+        self.logger.info('pipeline', f'Extractor config: {extractor_cfg}')
 
-        return BackendProcessResult(exit_code=0, raw_output=[str(p) for p in outs], raw_error=[])
+        # ── Determine routing from flowchart config ──────────────────────────
+        # Explicit gate patterns take PRIORITY over cb8.
+        # cb8 is the "full auto" fallback — it only fires when no specific
+        # pattern matches, so individual gate configs always win.
+        fc = getattr(config, 'flowchart', None)
+        if fc is not None:
+            cb1 = bool(getattr(fc, 'cb1', False))
+            cb2 = bool(getattr(fc, 'cb2', False))
+            cb3 = bool(getattr(fc, 'cb3', False))
+            cb4 = bool(getattr(fc, 'cb4', False))
+            cb5 = bool(getattr(fc, 'cb5', False))
+            cb6 = bool(getattr(fc, 'cb6', False))
+            cb7 = bool(getattr(fc, 'cb7', False))
+            cb8 = bool(getattr(fc, 'cb8', False))
+        else:
+            cb1 = cb2 = cb3 = cb4 = cb5 = cb6 = cb7 = cb8 = False
+
+        if cb1 and not cb2 and not cb4 and not cb5 and not cb7:
+            stages = 'sep_only'             # cb1 only — Demucs, output stems, stop
+        elif cb2 and cb3 and not cb5:
+            stages = 'sep_repair'           # sep → repair, no chop (cb1 optional)
+        elif cb7 and cb6 and not cb2:
+            stages = 'byo_chop'             # BYO → chop directly
+        elif cb4 and cb5 and cb6 and not cb2:
+            stages = 'byo_repair_chop'      # BYO → repair → chop
+        else:
+            stages = 'full'                 # full pipeline (cb8, all gates, or fallback)
+
+        self.logger.info('pipeline', f'Flowchart routing: stages={stages} '
+                         f'(cb1={cb1} cb2={cb2} cb3={cb3} cb4={cb4} '
+                         f'cb5={cb5} cb6={cb6} cb7={cb7} cb8={cb8})')
+
+        try:
+            result = run_pipeline_for_file(input_file, cfg_dict, base_out, progress_callback=progress_callback, stages=stages)
+        except Exception as e:
+            self.logger.error('pipeline', f'Pipeline exception: {e}')
+            return BackendProcessResult(exit_code=1, raw_output=[], raw_error=[str(e)])
+
+        if result.get('error'):
+            self.logger.error('pipeline', f"Pipeline error: {result['error']}")
+            return BackendProcessResult(exit_code=1, raw_output=[], raw_error=[result['error']])
+
+        slices = result.get('slices', [])
+        if isinstance(slices, dict) and slices.get('error'):
+            self.logger.error('pipeline', f"Extractor error: {slices['error']}")
+            return BackendProcessResult(exit_code=1, raw_output=[], raw_error=[slices['error']])
+
+        out_paths = [s['path'] for s in slices if isinstance(s, dict) and s.get('path')]
+        total = len(out_paths)
+        self.logger.info('pipeline', f'Pipeline finished with errors: exit=0 slices={total}')
+        return BackendProcessResult(exit_code=0, raw_output=out_paths, raw_error=[])
+

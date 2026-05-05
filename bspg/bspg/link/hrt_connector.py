@@ -22,11 +22,11 @@ class HRTConnector:
         self.is_linked = False
         self.thread = None
         self.host = '127.0.0.1'
-        self.port = 5050
+        self.port = 8090
         # whether the current attempt was manually triggered from Settings
         self.manual_triggered = False
 
-    def start_autolink(self, host: str = '127.0.0.1', port: int = 5050):
+    def start_autolink(self, host: str = '127.0.0.1', port: int = 8090):
         """
         Launch background thread to attempt linking.
         """

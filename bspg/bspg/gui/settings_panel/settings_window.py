@@ -1,8 +1,10 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QTextEdit, QCheckBox, QPushButton, QScrollArea
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
+    QTextEdit, QCheckBox, QPushButton, QScrollArea, QMessageBox,
+)
 from PySide6.QtGui import QTextOption
-from PySide6.QtCore import QTimer
+
 from typing import Optional
-from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QToolButton, QMessageBox
 
 
 class SettingsWindow(QWidget):
@@ -63,233 +65,127 @@ class SettingsWindow(QWidget):
         )
         self.legal_layout.addWidget(self.legal_text)
 
-        # Auto-scroll timer: scrolls down 1px every 40ms (~25px/s), resets at bottom
-        self._legal_scroll_paused = False
-        self._legal_scroll_timer = QTimer(self)
-        self._legal_scroll_timer.setInterval(40)
-        self._legal_scroll_timer.timeout.connect(self._tick_legal_scroll)
-        self._legal_scroll_timer.start()
-
-        # Pause auto-scroll while the user is manually interacting
-        self.legal_text.verticalScrollBar().sliderPressed.connect(
-            lambda: setattr(self, '_legal_scroll_paused', True)
+        # Status indicator label — shows acknowledged state at a glance
+        self.legal_status_label = QLabel('⚠️  Not Yet Acknowledged — Run button is locked')
+        self.legal_status_label.setStyleSheet(
+            'color: #cc8800; font-weight: bold; padding: 4px 0px;'
         )
-        self.legal_text.verticalScrollBar().sliderReleased.connect(
-            lambda: setattr(self, '_legal_scroll_paused', False)
+        self.legal_layout.addWidget(self.legal_status_label)
+
+        # Single permanent-acknowledge button (no checkbox needed)
+        self.legal_acknowledge_button = QPushButton('Permanently Acknowledge Legal Agreement')
+        self.legal_acknowledge_button.setMinimumHeight(36)
+        self.legal_acknowledge_button.setToolTip(
+            'Click once to permanently record your acknowledgement.\n'
+            'This persists until the app is uninstalled/reinstalled.'
         )
+        self.legal_layout.addWidget(self.legal_acknowledge_button)
 
-        # Acceptance checkbox
-        self.legal_accept_checkbox = QCheckBox(
-            "I accept these terms and understand my responsibilities."
-        )
-        self.legal_layout.addWidget(self.legal_accept_checkbox)
-
-        # Save button
-        self.legal_save_button = QPushButton("Save")
-        self.legal_layout.addWidget(self.legal_save_button)
-
-        # Wire UI signals to local handlers that call controller stubs
         try:
-            self.legal_accept_checkbox.stateChanged.connect(self.on_legal_acceptance_changed)
-        except Exception:
-            pass
-        try:
-            self.legal_save_button.clicked.connect(self.on_legal_save_clicked)
+            self.legal_acknowledge_button.clicked.connect(self.on_legal_acknowledge_clicked)
         except Exception:
             pass
 
         # Add to scrollable layout
         self.scroll_layout.addWidget(self.legal_section)
 
-        # --- Hot Rod Tuner settings section (I-4) ---
+        # --- GUI Tooltips toggle section ---
+        try:
+            self.tooltip_section = QGroupBox('GUI Tooltips')
+            tooltip_layout = QVBoxLayout()
+            self.tooltip_section.setLayout(tooltip_layout)
+
+            self.tooltip_toggle = QCheckBox(
+                'Enable hover tooltips on flowchart nodes and checkboxes'
+            )
+            self.tooltip_toggle.setChecked(True)  # on by default
+            self.tooltip_toggle.setToolTip(
+                'When checked, hovering over flowchart buttons and gates\n'
+                'shows a description of what each element does.\n'
+                'Uncheck this once you are familiar with the pipeline.'
+            )
+            tooltip_layout.addWidget(self.tooltip_toggle)
+
+            hint = QLabel('Tip: disable once you know how the pipeline works to reduce visual clutter.')
+            hint.setStyleSheet('color: #888; font-size: 10px;')
+            tooltip_layout.addWidget(hint)
+
+            self.scroll_layout.addWidget(self.tooltip_section)
+
+            try:
+                self.tooltip_toggle.stateChanged.connect(self._on_tooltip_toggle_changed)
+            except Exception:
+                pass
+        except Exception:
+            self.tooltip_toggle = None
+
+        # --- Hot Rod Tuner settings section ---
         try:
             self.hrt_section = QGroupBox()
             self.hrt_layout = QVBoxLayout()
             self.hrt_section.setLayout(self.hrt_layout)
 
-            # Title row with help icon
-            try:
-                title_row = QHBoxLayout()
-                title_label = QLabel('Hot Rod Tuner')
-                help_btn = QToolButton()
-                help_btn.setText('?')
-                help_btn.setFixedSize(20, 20)
-                help_btn.setStyleSheet('font-weight: bold;')
-                title_row.addWidget(title_label)
-                title_row.addWidget(help_btn)
-                title_row.addStretch()
-                self.hrt_layout.addLayout(title_row)
-                try:
-                    help_btn.clicked.connect(self.on_hrt_help_clicked)
-                except Exception:
-                    pass
-            except Exception:
-                pass
+            hrt_title = QLabel('Hot Rod Tuner')
+            self.hrt_layout.addWidget(hrt_title)
 
-            # Host
-            hrt_host_row = QHBoxLayout()
-            hrt_host_label = QLabel('Host:')
-            self.hrt_host_edit = QLineEdit()
-            hrt_host_row.addWidget(hrt_host_label)
-            hrt_host_row.addWidget(self.hrt_host_edit)
-            self.hrt_layout.addLayout(hrt_host_row)
-
-            # Port
-            hrt_port_row = QHBoxLayout()
-            hrt_port_label = QLabel('Port:')
-            self.hrt_port_edit = QLineEdit()
-            self.hrt_port_edit.setFixedWidth(80)
-            hrt_port_row.addWidget(hrt_port_label)
-            hrt_port_row.addWidget(self.hrt_port_edit)
-            self.hrt_layout.addLayout(hrt_port_row)
-
-            # Autolink checkbox
-            self.hrt_autolink_checkbox = QCheckBox('Automatically link to Hot Rod Tuner on startup')
-            self.hrt_layout.addWidget(self.hrt_autolink_checkbox)
-
-            # Save button
-            self.hrt_save_button = QPushButton('Save HRT Settings')
-            self.hrt_layout.addWidget(self.hrt_save_button)
-
-            # Manual Link Now button
-            self.hrt_linknow_button = QPushButton('Link Now')
+            # Single manual-link button — replaces old host/port/save/link-now cluster
+            self.hrt_linknow_button = QPushButton('Manually Link to HRT')
+            self.hrt_linknow_button.setMinimumHeight(34)
             self.hrt_layout.addWidget(self.hrt_linknow_button)
-            # Status line and timestamps
-            try:
-                self.hrt_status_label = QLabel('Status: ○ Not Linked')
-                self.hrt_layout.addWidget(self.hrt_status_label)
 
-                self.hrt_timestamp_label = QLabel('Last attempt: —    Last success: —')
-                self.hrt_layout.addWidget(self.hrt_timestamp_label)
-
-                self.hrt_hint_label = QLabel('')
-                self.hrt_hint_label.setStyleSheet('color: #888; font-size: 11px;')
-                self.hrt_layout.addWidget(self.hrt_hint_label)
-            except Exception:
-                pass
-            # Collapsible recent logs pane
-            try:
-                self.hrt_log_group = QGroupBox('Recent Connector Logs')
-                self.hrt_log_group.setCheckable(True)
-                self.hrt_log_group.setChecked(False)
-                self.hrt_log_layout = QVBoxLayout()
-                self.hrt_log_group.setLayout(self.hrt_log_layout)
-
-                self.hrt_log_text = QTextEdit()
-                self.hrt_log_text.setReadOnly(True)
-                self.hrt_log_text.setMinimumHeight(120)
-                self.hrt_log_text.setStyleSheet('font-size: 10px; background-color: #111; color: #ccc;')
-                self.hrt_log_layout.addWidget(self.hrt_log_text)
-
-                self.copy_logs_button = QPushButton('Copy Logs')
-                self.hrt_log_layout.addWidget(self.copy_logs_button)
-
-                self.hrt_layout.addWidget(self.hrt_log_group)
-
-                try:
-                    self.copy_logs_button.clicked.connect(self.on_copy_logs_clicked)
-                except Exception:
-                    pass
-                try:
-                    self.hrt_log_group.toggled.connect(lambda _: self.refresh_hrt_logs())
-                except Exception:
-                    pass
-            except Exception:
-                self.hrt_log_group = None
+            # Status feedback label
+            self.hrt_status_label = QLabel('Status: ○ Not Linked')
+            self.hrt_layout.addWidget(self.hrt_status_label)
 
             # add section to scrollable layout
             self.scroll_layout.addWidget(self.hrt_section)
 
-            # initialize from controller if available
-            try:
-                if self.controller and hasattr(self.controller, 'get_hrt_settings'):
-                    try:
-                        h = self.controller.get_hrt_settings()
-                        self.hrt_host_edit.setText(h.get('host', '127.0.0.1'))
-                        self.hrt_port_edit.setText(str(h.get('port', 5050)))
-                        self.hrt_autolink_checkbox.setChecked(bool(h.get('autolink_enabled', True)))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            # wire save
-            try:
-                self.hrt_save_button.clicked.connect(self.on_hrt_save_clicked)
-            except Exception:
-                pass
+            # wire button
             try:
                 self.hrt_linknow_button.clicked.connect(self.on_hrt_link_now_clicked)
             except Exception:
                 pass
-            try:
-                # when saving or toggling the log group, refresh status info
-                try:
-                    self.hrt_save_button.clicked.connect(lambda: self.refresh_hrt_status())
-                except Exception:
-                    pass
-            except Exception:
-                pass
         except Exception:
             pass
 
-        # Initialize checkbox from controller/config if available
+        # If already accepted (persisted from a previous run), freeze the button immediately
         try:
             if self.controller and hasattr(self.controller, 'is_terms_accepted'):
-                try:
-                    self.legal_accept_checkbox.setChecked(self.controller.is_terms_accepted())
-                except Exception:
-                    pass
+                if self.controller.is_terms_accepted():
+                    self._apply_acknowledged_ui()
         except Exception:
             pass
 
-    def _tick_legal_scroll(self):
-        """Advance the legal text auto-scroll by 1px; loop back to top after a pause."""
-        if self._legal_scroll_paused:
-            return
-        sb = self.legal_text.verticalScrollBar()
-        if sb.value() >= sb.maximum():
-            # pause at bottom for ~2 s (2000ms / 40ms = 50 ticks), then reset
-            if not hasattr(self, '_legal_pause_ticks'):
-                self._legal_pause_ticks = 0
-            self._legal_pause_ticks += 1
-            if self._legal_pause_ticks >= 50:
-                self._legal_pause_ticks = 0
-                sb.setValue(0)
-        else:
-            self._legal_pause_ticks = 0
-            sb.setValue(sb.value() + 1)
-
-    def on_legal_acceptance_changed(self, state):
+    def on_legal_acknowledge_clicked(self):
+        """User clicked the permanent-acknowledge button — persist and freeze."""
         try:
-            if self.controller and hasattr(self.controller, 'legal_acceptance_checkbox_changed'):
-                try:
-                    self.controller.legal_acceptance_checkbox_changed(bool(state))
-                except Exception:
-                    pass
+            if self.controller and hasattr(self.controller, 'legal_acceptance_save_requested'):
+                self.controller.legal_acceptance_save_requested()
+        except Exception:
+            pass
+        self._apply_acknowledged_ui()
+
+    def _apply_acknowledged_ui(self):
+        """Freeze the acknowledge button and flip status label to green once saved."""
+        try:
+            self.legal_status_label.setText('✅  Legal Agreement Acknowledged — Run button unlocked')
+            self.legal_status_label.setStyleSheet(
+                'color: #228822; font-weight: bold; padding: 4px 0px;'
+            )
+        except Exception:
+            pass
+        try:
+            self.legal_acknowledge_button.setText('✓ Legal Agreement Acknowledged')
+            self.legal_acknowledge_button.setEnabled(False)
+            self.legal_acknowledge_button.setToolTip(
+                'You have permanently acknowledged the legal agreement.'
+            )
         except Exception:
             pass
 
     def on_legal_save_clicked(self):
-        try:
-            # Ensure controller sees the current checkbox state (defensive)
-            try:
-                state = bool(self.legal_accept_checkbox.isChecked())
-                if self.controller and hasattr(self.controller, 'legal_acceptance_checkbox_changed'):
-                    try:
-                        self.controller.legal_acceptance_checkbox_changed(state)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            if self.controller and hasattr(self.controller, 'legal_acceptance_save_requested'):
-                try:
-                    self.controller.legal_acceptance_save_requested()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        """Legacy stub — no-op, kept so any surviving connections don\'t crash."""
+        pass
 
     def scroll_to_legal_section(self):
         try:
@@ -303,7 +199,7 @@ class SettingsWindow(QWidget):
             if not self.controller:
                 return
             host = ''
-            port = 5050
+            port = 8090
             try:
                 host = self.hrt_host_edit.text().strip()
             except Exception:
@@ -312,7 +208,7 @@ class SettingsWindow(QWidget):
                 port_text = self.hrt_port_edit.text().strip()
                 port = int(port_text)
             except Exception:
-                port = 5050
+                port = 8090
             try:
                 autolink = bool(self.hrt_autolink_checkbox.isChecked())
             except Exception:
@@ -459,5 +355,81 @@ class SettingsWindow(QWidget):
                     self.hrt_log_text.copy()
             except Exception:
                 pass
+        except Exception:
+            pass
+
+    def _on_tooltip_toggle_changed(self, state):
+        """Enable or disable tooltips on all flowchart widgets when the toggle changes."""
+        enabled = bool(state)
+        try:
+            # Walk up to main window and find flowchart_widget
+            mw = self.parent()
+            while mw is not None and not hasattr(mw, 'flowchart_widget'):
+                mw = mw.parent()
+            if mw is None:
+                return
+            fw = getattr(mw, 'flowchart_widget', None)
+            if fw is None:
+                return
+            # Toggle tooltips on all checkboxes
+            for i in range(1, 9):
+                cb = getattr(fw, f'flowchart_cb_{i}', None)
+                if cb is not None:
+                    if enabled:
+                        cb.setToolTip(fw._get_checkpoint_tooltip(i))
+                    else:
+                        cb.setToolTip('')
+            # Toggle tooltips on node labels (identified by objectName)
+            node_names = {
+                'node_stem_sep', 'node_stem_repair', 'node_sample_chop', 'node_input_stem',
+            }
+            for child in fw.findChildren(__import__('PySide6.QtWidgets', fromlist=['QLabel']).QLabel):
+                if child.objectName() in node_names:
+                    if not enabled:
+                        child.setToolTip('')
+                    # re-enable: tooltips were set at construction; re-build from label text
+                    elif child.objectName() == 'node_stem_sep':
+                        child.setToolTip(
+                            "Stem Separation \u2014 Stage 1\n\nRuns Demucs (htdemucs_6s) on your input mix to separate it into:\n"
+                            "  vocals \u00b7 drums \u00b7 bass \u00b7 guitar \u00b7 piano \u00b7 other\n\n"
+                            "Outputs raw stem files to: <output>/<song>_stems/\n"
+                            "Use Gate [1] to pass results to the next stage."
+                        )
+                    elif child.objectName() == 'node_stem_repair':
+                        child.setToolTip(
+                            "Stem Repair \u2014 Stage 2\n\nRuns the HQ Glimmer Repair engine on separated stems.\n"
+                            "Detects and removes short high-frequency transient artifacts (glimmers).\n\n"
+                            "Modes: fast (median spectral filter) \u00b7 balanced (FFT inpainting)\n"
+                            "Outputs to: <output>/<song>_repaired/\n"
+                            "Use Gate [3] to pass results to Sample Chop."
+                        )
+                    elif child.objectName() == 'node_sample_chop':
+                        child.setToolTip(
+                            "Sample Chop \u2014 Stage 3\n\nSlices stems into individual hit/sample files.\n"
+                            "Uses silence detection and transient/onset detection.\n\n"
+                            "Each sample is zero-cross aligned, normalized, faded, and saved as:\n"
+                            "<song>_<stem>_NNNN.wav\n"
+                            "Outputs to: <output>/<song>_samples/<stem>/\n"
+                            "Use Gate [6] to write results to output folder."
+                        )
+                    elif child.objectName() == 'node_input_stem':
+                        child.setToolTip(
+                            "Input Stem \u2014 Bring Your Own Stem\n\n"
+                            "Load a pre-separated or custom stem file directly into the pipeline.\n"
+                            "Bypasses Stem Separation entirely.\n\n"
+                            "Use Gate [4] to route into Stem Repair.\n"
+                            "Use Gate [7] to route directly into Sample Chop (skip Repair)."
+                        )
+            # Toggle gear button tooltip
+            for child in fw.findChildren(__import__('PySide6.QtWidgets', fromlist=['QPushButton']).QPushButton):
+                if child.objectName() == 'gear_settings_btn':
+                    if not enabled:
+                        child.setToolTip('')
+                    else:
+                        child.setToolTip(
+                            "Sample Chop Settings\n\nConfigure slicing parameters for Stage 3:\n"
+                            "  \u00b7 Silence threshold\n  \u00b7 Min silence duration\n"
+                            "  \u00b7 Transient sensitivity\n  \u00b7 Min event length (ms)"
+                        )
         except Exception:
             pass
