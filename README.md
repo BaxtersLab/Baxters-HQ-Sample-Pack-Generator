@@ -1,3 +1,5 @@
+![HQSPG Banner](hqspg/assets/bannnner.png)
+
 # HQSPG — HQ Sample Pack Generator
 
 This repository contains HQSPG: a pipeline to separate stems (Demucs), repair audio artifacts (HQ_StemRepair), and extract sample slices.
